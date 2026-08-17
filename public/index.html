@@ -21,6 +21,7 @@
 			@media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
 			.off { color: #888; }
 			small { display: block; color: #666; margin-top: .5rem; font-size: .8rem; font-weight: 400; }
+			#ago { display: inline-block; min-width: 12ch; text-align: left; font-variant-numeric: tabular-nums; }
 			a { color: #4ade80; }
 			.lede { color: #9a9aa5; font-size: .9rem; text-align: center; margin: 0 0 1.5rem; }
 			details { margin-top: 1.5rem; text-align: left; color: #888; font-size: .85rem; }
@@ -53,7 +54,18 @@
 		</main>
 		<script>
 			const out = document.getElementById('out');
-			let timer;
+			let timer, checkedAt;
+
+			/** Show how stale the cached scrape is, refreshed every 10s. */
+			function tick() {
+				const el = document.getElementById('ago');
+				if (!el || !checkedAt) return;
+				const s = Math.max(0, Math.round((Date.now() - checkedAt) / 1000));
+				// zero-padded + tabular figures so the label never reflows
+				const pad = (n) => String(n).padStart(2, '0');
+				el.textContent = s < 60 ? `checked ${pad(s)}s ago` : `checked ${Math.floor(s / 60)}m ${pad(s % 60)}s ago`;
+			}
+			setInterval(tick, 10_000);
 
 			/** Poll the API for one channel and keep the answer fresh. */
 			async function check(platform, ref) {
@@ -66,9 +78,11 @@
 					if (!d.found) return (out.innerHTML = `<span class="off">not found</span>`);
 					// bust the CDN cache so the live preview matches the poll
 					const thumb = d.thumbnail ? `<img src="${d.thumbnail}?t=${Date.now()}" alt="" onerror="this.remove()" />` : '';
+					checkedAt = Date.now() - d.age * 1000; // server age avoids client clock skew
 					out.innerHTML = d.live
-						? `${thumb}<span class="live"><i class="dot"></i>LIVE</span><small>${d.url ? `<a href="${d.url}" target="_blank" rel="noreferrer">watch</a> · ` : ''}checked just now</small>`
-						: `${thumb}<span class="off">offline</span><small>rechecking every minute</small>`;
+						? `${thumb}<span class="live"><i class="dot"></i>LIVE</span><small>${d.url ? `<a href="${d.url}" target="_blank" rel="noreferrer">watch</a> · ` : ''}<span id="ago"></span></small>`
+						: `${thumb}<span class="off">offline</span><small><span id="ago"></span></small>`;
+					tick();
 				} catch {
 					out.textContent = 'network error';
 				}

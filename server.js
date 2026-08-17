@@ -71,7 +71,8 @@ createServer(async (req, res) => {
 		cache.set(key, { at: Date.now(), value });
 	}
 	try {
-		json(200, { platform, ref, ...(await cache.get(key).value), ttl: TTL / 1000 });
+		const entry = cache.get(key);
+		json(200, { platform, ref, ...(await entry.value), age: Math.round((Date.now() - entry.at) / 1000), ttl: TTL / 1000 });
 	} catch (err) {
 		json(502, { error: err.message });
 	}
