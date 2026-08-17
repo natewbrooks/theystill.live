@@ -6,7 +6,7 @@
 		<title>they still live? | Free Stream Check for YouTube and Twitch</title>
 		<meta
 			name="description"
-			content="Free live check for YouTube and Twitch. See if a channel is streaming right now, or call the free API for a true/false answer - no API keys, no login, no OAuth."
+			content="Check if a YouTube or Twitch channel is live right now. Free stream-status API returns true or false in one request - no API key, no login, no OAuth."
 		/>
 		<meta name="keywords" content="is streamer live, youtube live check, twitch live check, stream status api, free live status api, no api key" />
 		<meta name="author" content="Nate Brooks" />
@@ -20,9 +20,15 @@
 		<meta property="og:description" content="See if a YouTube or Twitch channel is live right now. Free API, no keys, no login." />
 		<meta property="og:url" content="https://theystill.live/" />
 		<meta property="og:locale" content="en_US" />
-		<meta name="twitter:card" content="summary" />
+		<meta property="og:image" content="https://theystill.live/og.png" />
+		<meta property="og:image:width" content="1200" />
+		<meta property="og:image:height" content="630" />
+		<meta property="og:image:alt" content="they still live? - free live-status checker for YouTube and Twitch" />
+		<meta name="twitter:card" content="summary_large_image" />
 		<meta name="twitter:title" content="they still live? | Free Stream Check for YouTube and Twitch" />
 		<meta name="twitter:description" content="See if a YouTube or Twitch channel is live right now. Free API, no keys, no login." />
+		<meta name="twitter:image" content="https://theystill.live/og.png" />
+		<meta name="twitter:image:alt" content="they still live? - free live-status checker for YouTube and Twitch" />
 
 		<script type="application/ld+json">
 			{
@@ -34,7 +40,70 @@
 				"operatingSystem": "Any",
 				"description": "Free live-status checker and API for YouTube and Twitch channels. No API keys, no login.",
 				"offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+				"featureList": [
+					"Check if a YouTube channel is live",
+					"Check if a Twitch channel is live",
+					"Free live-status API with no API key",
+					"Batch lookups across both platforms",
+					"Embed URLs for the official players"
+				],
 				"author": { "@type": "Person", "name": "Nate Brooks", "url": "https://github.com/natewbrooks" }
+			}
+		</script>
+		<script type="application/ld+json">
+			{
+				"@context": "https://schema.org",
+				"@type": "FAQPage",
+				"mainEntity": [
+					{
+						"@type": "Question",
+						"name": "Do I need a YouTube or Twitch API key?",
+						"acceptedAnswer": {
+							"@type": "Answer",
+							"text": "No. Nothing here uses the YouTube Data API or Twitch Helix, so there is no key, token, app registration, or quota."
+						}
+					},
+					{
+						"@type": "Question",
+						"name": "How quickly does it notice someone going live?",
+						"acceptedAnswer": {
+							"@type": "Answer",
+							"text": "Within a minute. Each channel is re-checked upstream at most once every 60 seconds, and the page repolls every 20 seconds."
+						}
+					},
+					{
+						"@type": "Question",
+						"name": "Can I check several channels in one request?",
+						"acceptedAnswer": {
+							"@type": "Answer",
+							"text": "Yes. Comma-separate up to ten channels, and prefix an entry with twitch: or yt: to mix platforms in one call. The response includes a shortlist of whoever is live."
+						}
+					},
+					{
+						"@type": "Question",
+						"name": "Can I embed the stream?",
+						"acceptedAnswer": {
+							"@type": "Answer",
+							"text": "Yes. A live result carries an embed URL for the official YouTube or Twitch player, ready to drop into an iframe. Twitch's player refuses to load unless its parent parameter names the domain serving your page, so replace the YOUR_DOMAIN placeholder with your own hostname before using it."
+						}
+					},
+					{
+						"@type": "Question",
+						"name": "Is it free, and are there limits?",
+						"acceptedAnswer": {
+							"@type": "Answer",
+							"text": "Free. Twenty requests per minute per IP, and answers are cached for 60 seconds, so polling inside that window costs nothing."
+						}
+					},
+					{
+						"@type": "Question",
+						"name": "Does it work with a channel ID instead of a handle?",
+						"acceptedAnswer": {
+							"@type": "Answer",
+							"text": "Yes. A YouTube UC... channel ID works anywhere a handle does, and is the more stable reference."
+						}
+					}
+				]
 			}
 		</script>
 
@@ -104,7 +173,7 @@
 			/* beats the .frame img rule, the face is its own sized glyph. Its ink is baked to match .nf */
 			.nf img { width: 1.05em; height: 1.05em; object-fit: contain; }
 			.live { color: #4ade80; }
-			.dot { display: inline-block; width: .55em; height: .55em; margin-right: .4em; vertical-align: middle; border-radius: 50%; background: #ef4444; box-shadow: 0 0 .6em #ef4444; animation: blink 1.2s steps(1, end) infinite; }
+			.dot { display: inline-block; position: relative; top: 8px; width: .55em; height: .55em; margin-right: .4em; vertical-align: middle; border-radius: 50%; background: #ef4444; box-shadow: 0 0 .6em #ef4444; animation: blink 1.2s steps(1, end) infinite; }
 			@keyframes blink { 50% { opacity: .15; } }
 			@media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
 			.off { color: #888; }
@@ -142,6 +211,20 @@
 			.verb { color: #4ade80; font-weight: 700; }
 			pre { flex: 1; margin: 0; padding: .8rem; overflow: auto; color: #ccc; }
 			footer { margin-top: 2rem; color: #5a5a63; font-size: .75rem; text-align: left; }
+			#moreBtn { display: block; margin: .4rem 0 0; padding: 0; background: none; color: #7a7a86; font: inherit; text-decoration: underline; text-underline-offset: 3px; }
+			#moreBtn:hover { color: #aaa; }
+			/* grid-rows trick: the copy stays in the DOM and animates open, no height math */
+			.more { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .35s ease; }
+			.more[data-open] { grid-template-rows: 1fr; }
+			.more > * { overflow: hidden; }
+			@media (prefers-reduced-motion: reduce) { .more { transition: none; } }
+			/* crawlable copy, below the tool itself */
+			.about { text-align: left; color: #5a5a63; font-size: .75rem; line-height: 1.7; }
+			.about h2 { margin: 1.4rem 0 .3rem; color: #8a8a94; font-size: .8rem; font-weight: 600; }
+			.about p { margin: 0 0 .8rem; }
+			.about code { color: #9a9aa5; font-family: ui-monospace, monospace; font-size: .85em; }
+			.about dt { margin-top: .8rem; color: #8a8a94; font-weight: 600; }
+			.about dd { margin: .2rem 0 0; }
 		</style>
 	</head>
 	<body>
@@ -214,9 +297,70 @@
 				</div>
 			</details>
 			<footer>
-				Upstream pages are scraped at most once per minute per channel. Your browser repolls every 20s and gets the cached
-				answer, so results are accurate to the minute.
+				Free to use, no account needed. Results stay accurate to the minute and refresh on their own while this page is open.
+				<button type="button" id="moreBtn" aria-expanded="false" aria-controls="more">click for more info</button>
 			</footer>
+
+			<div class="more" id="more">
+				<section class="about">
+				<h2>Is that streamer live right now?</h2>
+				<p>
+					Paste a YouTube handle or a Twitch username and this page answers in about a second: live or offline. If they are
+					streaming, you get the current thumbnail, a watch link, and a player you can start right here. If they are not, you
+					get their offline art and how long ago the answer was checked. Leave the tab open and it keeps rechecking, so it
+					tells you the moment someone goes live.
+				</p>
+
+				<h2>A free live-status API with no API key</h2>
+				<p>
+					The same URL you are reading is the API. Request <code>/yt/lofigirl</code> or <code>/twitch/ludwig</code> with
+					<code>Accept: application/json</code> and you get back <code>{"live": true}</code> plus the channel id, watch URL,
+					embed URL, and thumbnail. There is no developer account to register, no OAuth dance, no client secret, and no quota
+					form to fill in. It works from a shell script, a Discord bot, a status page, or an OBS overlay.
+				</p>
+				<p>
+					Both official APIs make this harder than it should be. YouTube's Data API charges quota for a search call and
+					returns stale results. Twitch's Helix API needs a registered app and an app access token you have to refresh. This
+					service reads the same public channel pages your browser would, so nothing needs authenticating.
+				</p>
+
+				<h2>How the live check works</h2>
+				<p>
+					A YouTube channel's <code>/live</code> URL redirects to the watch page only while a stream is running, so the
+					canonical link tells you the answer and hands over the video id. A Twitch channel page titles itself
+					<em>Name - Live on Twitch</em> only while broadcasting. Reading those two markers is the whole trick - no key
+					required, because the information is already public.
+				</p>
+
+				<h2>Questions</h2>
+				<dl>
+					<dt>Do I need a YouTube or Twitch API key?</dt>
+					<dd>No. Nothing here uses the YouTube Data API or Twitch Helix, so there is no key, token, app registration, or quota.</dd>
+
+					<dt>How quickly does it notice someone going live?</dt>
+					<dd>Within a minute. Each channel is re-checked upstream at most once every 60 seconds, and the page repolls every 20 seconds.</dd>
+
+					<dt>Can I check several channels in one request?</dt>
+					<dd>
+						Yes. Comma-separate up to ten, and prefix an entry with <code>twitch:</code> or <code>yt:</code> to mix platforms
+						in one call. The response includes a shortlist of whoever is live.
+					</dd>
+
+					<dt>Can I embed the stream?</dt>
+					<dd>
+						Yes. A live result carries an <code>embed</code> URL for the official YouTube or Twitch player, ready to drop into
+						an iframe. Twitch's player refuses to load unless its <code>parent</code> parameter names the domain serving your
+						page, so replace the <code>YOUR_DOMAIN</code> placeholder with your own hostname before using it.
+					</dd>
+
+					<dt>Is it free, and are there limits?</dt>
+					<dd>Free. Twenty requests per minute per IP, and answers are cached for 60 seconds, so polling inside that window costs nothing.</dd>
+
+					<dt>Does it work with a channel ID instead of a handle?</dt>
+					<dd>Yes. A YouTube <code>UC...</code> channel ID works anywhere a handle does, and is the more stable reference.</dd>
+				</dl>
+				</section>
+			</div>
 		</main>
 		<script>
 			const out = document.getElementById('out');
@@ -248,6 +392,15 @@
 			raw.addEventListener('toggle', () => localStorage.setItem('apiOpen', raw.open ? '1' : '0'));
 			addEventListener('keydown', (e) => {
 				if (e.key === 'Escape' && raw.open) raw.open = false;
+			});
+
+			// the long copy collapses behind one link, animated via the grid-rows trick
+			const moreBtn = document.getElementById('moreBtn');
+			moreBtn.addEventListener('click', () => {
+				const box = document.getElementById('more');
+				const open = box.toggleAttribute('data-open');
+				moreBtn.setAttribute('aria-expanded', String(open));
+				moreBtn.textContent = open ? 'less info' : 'click for more info';
 			});
 
 			/** Same 16/9 box in every state. Real art fills it, a bare avatar sits centered instead. */

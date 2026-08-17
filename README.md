@@ -29,7 +29,7 @@ GET /twitch/<login>
 ```
 
 ```bash
-curl localhost:3000/yt/@lofigirl
+curl localhost:3000/yt/lofigirl
 curl localhost:3000/yt/UCSJ4gkVC6NrvII8umztf0Ow
 curl localhost:3000/twitch/lofigirl
 ```
@@ -39,12 +39,14 @@ Response:
 ```json
 {
 	"platform": "yt",
-	"ref": "@lofigirl",
+	"ref": "lofigirl",
 	"live": true,
 	"found": true,
 	"id": "UCSJ4gkVC6NrvII8umztf0Ow",
 	"url": "https://www.youtube.com/watch?v=0muHFBSiybw",
+	"embed": "https://www.youtube.com/embed/0muHFBSiybw",
 	"thumbnail": "https://i.ytimg.com/vi/0muHFBSiybw/maxresdefault.jpg",
+	"art": "preview",
 	"age": 12,
 	"ttl": 60
 }
@@ -57,7 +59,8 @@ Response:
 | `id` | stable ref - YouTube channel id, or Twitch login |
 | `url` | live watch URL when live, else `null` |
 | `embed` | iframe player URL when live, else `null`. Twitch's carries a `parent=YOUR_DOMAIN` placeholder you replace with the host serving your page |
-| `thumbnail` | live preview when live, else channel avatar |
+| `thumbnail` | live preview when live, else the channel's offline art, banner, or avatar |
+| `art` | which of those the thumbnail is: `preview`, `offline`, `banner`, or `avatar` |
 | `age` | seconds since the upstream page was last scraped |
 | `ttl` | seconds an answer is cached before a fresh scrape |
 
@@ -77,13 +80,13 @@ Comma-separate the refs. Prefix an entry with `platform:` to mix YouTube and Twi
 
 ```bash
 curl localhost:3000/twitch/lofigirl,ludwig
-curl localhost:3000/yt/@lofigirl,twitch:ludwig
+curl localhost:3000/yt/lofigirl,twitch:ludwig
 ```
 
 ```json
 {
-	"results": [{ "platform": "yt", "ref": "@lofigirl", "live": true, "...": "..." }, { "platform": "twitch", "ref": "ludwig", "live": false, "...": "..." }],
-	"live": ["yt:@lofigirl"]
+	"results": [{ "platform": "yt", "ref": "lofigirl", "live": true, "...": "..." }, { "platform": "twitch", "ref": "ludwig", "live": false, "...": "..." }],
+	"live": ["yt:lofigirl"]
 }
 ```
 

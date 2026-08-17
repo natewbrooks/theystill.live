@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
+import { gzipSync } from 'node:zlib';
 import * as cheerio from 'cheerio';
 
 const PORT = process.env.PORT || 3000;
@@ -14,6 +15,8 @@ const MAX_SCRAPES = 4; // concurrent upstream fetches
 const MAX_BATCH = 10; // channels per request
 const MAX_BYTES = 4 << 20; // refuse absurd upstream responses
 const REF = /^@?[A-Za-z0-9_.-]{2,60}$/; // channel handles only, never arbitrary paths
+const STATIC = { 'troll.svg': 'image/svg+xml', 'og.png': 'image/png' };
+const BUILT = new Date().toISOString().slice(0, 10); // sitemap lastmod, stamped at boot
 
 const cache = new Map(); // key -> { at, ttl, value }
 const hits = new Map(); // ip -> { count, resetAt }
@@ -160,6 +163,18 @@ async function lookup(platform, ref) {
 	return { platform, ref, ...(await entry.value), age: Math.round((Date.now() - entry.at) / 1000), ttl: TTL / 1000 };
 }
 
+/** The page, gzipped once and kept in memory. Falls back to plain bytes for old clients. */
+let page = null;
+async function sendPage(req, res) {
+	page ??= await readFile(new URL('./public/index.html', import.meta.url)).then((raw) => ({ raw, gz: gzipSync(raw) }));
+	const gzip = (req.headers['accept-encoding'] || '').includes('gzip');
+	res.writeHead(200, {
+		'content-type': 'text/html; charset=utf-8',
+		'cache-control': 'public, max-age=300',
+		...(gzip ? { 'content-encoding': 'gzip' } : {}),
+	}).end(gzip ? page.gz : page.raw);
+}
+
 const server = createServer(async (req, res) => {
 	const json = (code, body, headers) => res.writeHead(code, { 'content-type': 'application/json', ...headers }).end(JSON.stringify(body));
 	if (req.method !== 'GET') return json(405, { error: 'GET only' });
@@ -167,25 +182,25 @@ const server = createServer(async (req, res) => {
 
 	const [, platform, rawRef] = req.url.split('?')[0].split('/');
 
-	if (!platform && !rawRef) {
-		const html = await readFile(new URL('./public/index.html', import.meta.url));
-		return res.writeHead(200, { 'content-type': 'text/html' }).end(html);
+	if (!platform && !rawRef) return sendPage(req, res);
+	if (STATIC[platform] && !rawRef) {
+		const file = await readFile(new URL(`./public/${platform}`, import.meta.url));
+		return res.writeHead(200, { 'content-type': STATIC[platform], 'cache-control': 'public, max-age=604800' }).end(file);
 	}
-	if (platform === 'troll.svg' && !rawRef) {
-		const svg = await readFile(new URL('./public/troll.svg', import.meta.url));
-		return res.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'public, max-age=86400' }).end(svg);
-	}
-	if (platform === 'robots.txt') return res.writeHead(200, { 'content-type': 'text/plain' }).end(`User-agent: *\nAllow: /$\nDisallow: /yt/\nDisallow: /twitch/\nSitemap: ${SITE}sitemap.xml\n`);
+	// per-channel paths are thin duplicates of the home page, so they stay out of the index
+	if (platform === 'robots.txt')
+		return res
+			.writeHead(200, { 'content-type': 'text/plain' })
+			.end(`User-agent: *\nAllow: /$\nAllow: /og.png\nDisallow: /yt/\nDisallow: /twitch/\n\nSitemap: ${SITE}sitemap.xml\n`);
 	if (platform === 'sitemap.xml') {
-		const body = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${SITE}</loc><changefreq>weekly</changefreq></url></urlset>\n`;
+		const body =
+			`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">` +
+			`<url><loc>${SITE}</loc><lastmod>${BUILT}</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url></urlset>\n`;
 		return res.writeHead(200, { 'content-type': 'application/xml' }).end(body);
 	}
 	if (!providers[platform]) return json(404, { error: 'unknown platform' });
 	// browsers asking for /yt/handle get the page, API clients get JSON
-	if ((req.headers.accept || '').includes('text/html')) {
-		const html = await readFile(new URL('./public/index.html', import.meta.url));
-		return res.writeHead(200, { 'content-type': 'text/html' }).end(html);
-	}
+	if ((req.headers.accept || '').includes('text/html')) return sendPage(req, res);
 
 	// comma-separated for batches, each entry optionally "platform:ref" to mix platforms
 	let refs;
