@@ -171,7 +171,8 @@
 			/* a channel banner is far wider than 16/9, crop it rather than letterbox */
 			.frame.banner img { object-fit: cover; }
 			/* nothing but an avatar to show: center it small instead of stretching */
-			.frame.avatar img { width: auto; height: 45%; border-radius: 50%; opacity: .5; filter: grayscale(.5); }
+			/* max-width bounds it even when the frame height is not a definite percentage base */
+			.frame.avatar img { width: auto; height: 45%; max-width: 45%; max-height: 45%; border-radius: 50%; opacity: .5; filter: grayscale(.5); }
 			/* 404 with the troll face as the zero, centered in the frame */
 			.nf { display: flex; align-items: center; gap: .1em; font-size: clamp(3rem, 13vw, 5.5rem); font-weight: 700; line-height: 1; color: #3a3a44; }
 			/* beats the .frame img rule, the face is its own sized glyph. Its ink is baked to match .nf */
@@ -252,7 +253,8 @@
 				/* border-box, else the 100svh min-height and the padding stack into 100vh + 32px */
 				body { box-sizing: border-box; min-height: 100dvh; padding: 16px; place-items: stretch center; }
 				main { width: min(520px, 100%); min-height: calc(100dvh - 32px); display: grid; grid-template-rows: auto auto auto 1fr auto; }
-				#out { margin-top: 1rem; min-height: 0; }
+				/* grid, so the card gets a definite height for its rows and percentages to resolve against */
+				#out { margin-top: 1rem; min-height: 0; display: grid; }
 				.card { width: 100%; height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) auto auto; }
 				/* fills the leftover row, cropping the preview rather than reserving height for it */
 				.frame { width: 100%; height: calc(100% - 1rem); min-height: 0; aspect-ratio: auto; }
