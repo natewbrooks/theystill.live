@@ -54,17 +54,32 @@ function allow(ip) {
 	return h.count <= RATE.max ? 0 : Math.max(1, Math.ceil((h.resetAt - now) / 1000));
 }
 
+// "N watching now" / "Started streaming N minutes ago" only render for a currently live video
+const YT_LIVE_TEXT = /" watching now"|"Started streaming /;
+
+/** Parsed ytInitialPlayerResponse, or null when the page has none. */
+function playerDetails(html) {
+	const m = html.match(/ytInitialPlayerResponse\s*=\s*(\{.+?\})\s*;(?:\s*var|\s*<\/script>)/s);
+	try {
+		return m ? JSON.parse(m[1])?.videoDetails : null;
+	} catch {
+		return null;
+	}
+}
+
 /**
  * Datacenter IPs get a page variant that skips the /live redirect, so the canonical trick fails there.
  * The LIVE badge still shows up, so take the candidate video ids and confirm one on its watch page.
+ * Candidates can be unrelated videos from the page, so each must be live AND belong to this channel.
  * @returns {Promise<string|null>} the live video id, or null
  */
-async function ytLiveFallback(html) {
+async function ytLiveFallback(html, channelId) {
 	if (!/"text":"LIVE"|"style":"LIVE"/.test(html)) return null;
 	const ids = [...new Set([...html.matchAll(/"videoId":"([\w-]{11})"/g)].map((m) => m[1]))].slice(0, 3);
 	for (const id of ids) {
 		const $ = await load(`https://www.youtube.com/watch?v=${id}`, { cookie: YT_COOKIE }).catch(() => null);
-		if ($ && /"isLiveNow":true/.test($.html)) return id;
+		const vd = $ && playerDetails($.html);
+		if (vd?.videoId === id && (!channelId || vd.channelId === channelId) && (vd.isLiveNow || YT_LIVE_TEXT.test($.html))) return id;
 	}
 	return null;
 }
@@ -78,12 +93,16 @@ async function yt(ref) {
 	const $ = await load(`https://www.youtube.com/${path}/live`, { cookie: YT_COOKIE });
 	if (!$) return { live: false, found: false };
 	const canonical = $('link[rel="canonical"]').attr('href') || '';
+	const id = $.html.match(/"externalChannelId":"(UC[\w-]{22})"|channel\/(UC[\w-]{22})/)?.slice(1).find(Boolean) || null;
 	let video = canonical.match(/[?&]v=([\w-]{11})/)?.[1];
-	// consent wall or an unexpected page shape strips the canonical link, so fall back to the player payload
-	if (!video && /"isLiveNow":true|"isLive":true/.test($.html)) video = $.html.match(/"videoId":"([\w-]{11})"/)?.[1];
+	// no canonical: trust the embedded player payload only when it names this channel's own live video
+	if (!video) {
+		const vd = playerDetails($.html);
+		if (vd && (!id || vd.channelId === id) && (vd.isLiveNow || YT_LIVE_TEXT.test($.html))) video = vd.videoId;
+	}
 	// never report a live channel as offline just because the page was unreadable
 	if (!canonical && !video) throw new Error('youtube page not readable');
-	if (!video) video = await ytLiveFallback($.html);
+	if (!video) video = await ytLiveFallback($.html, id);
 	// offline falls back to the channel banner, then the avatar
 	// the embedded banner URL bakes in a letterbox crop, ask for the plain 16/9 art instead
 	const bannerId = $.html.match(/https:\/\/yt3\.googleusercontent\.com\/([\w-]+)=w\d+-fcrop64=/)?.[1];
@@ -92,8 +111,8 @@ async function yt(ref) {
 	return {
 		live: Boolean(video),
 		found: true,
-		id: $.html.match(/"externalChannelId":"(UC[\w-]{22})"|channel\/(UC[\w-]{22})/)?.slice(1).find(Boolean) || null,
-		url: video ? canonical : null,
+		id,
+		url: video ? canonical || `https://www.youtube.com/watch?v=${video}` : null,
 		embed: video ? `https://www.youtube.com/embed/${video}` : null,
 		thumbnail,
 		art: video ? 'preview' : banner ? 'banner' : 'avatar',
@@ -101,41 +120,49 @@ async function yt(ref) {
 }
 
 /**
- * Twitch's offline art and channel existence are not in the page HTML. Its public web client id
+ * Twitch's page HTML carries no live markers (badge, viewer count, and uptime are all
+ * client-rendered), so GQL's stream object is the source of truth. Its public web client id
  * needs no account, so this stays key-free.
- * @returns {Promise<{exists: boolean, offlineImage: string|null}|null>} null when the lookup itself failed
+ * @returns {Promise<{exists: boolean, live: boolean, offlineImage: string|null, avatar: string|null}|null>} null when the lookup itself failed
  */
 async function twitchUser(login) {
 	try {
 		const res = await fetch('https://gql.twitch.tv/gql', {
 			method: 'POST',
 			headers: { 'client-id': 'kimne78kx3ncx6brgo4mv6wki5h1ko', 'content-type': 'application/json' },
-			body: JSON.stringify({ query: `{user(login:"${login}"){offlineImageURL}}` }),
+			body: JSON.stringify({ query: `{user(login:"${login}"){offlineImageURL profileImageURL(width:300) stream{id}}}` }),
 			signal: AbortSignal.timeout(5_000),
 		});
 		if (!res.ok) return null;
 		const user = (await res.json())?.data?.user;
-		return { exists: Boolean(user), offlineImage: user?.offlineImageURL || null };
+		return { exists: Boolean(user), live: Boolean(user?.stream), offlineImage: user?.offlineImageURL || null, avatar: user?.profileImageURL || null };
 	} catch {
 		return null;
 	}
 }
 
-/** Twitch: og:title ends "- Live on Twitch" only while streaming. */
+/**
+ * Preview CDN fallback: 200 only while a stream is up, 302 to a 404 placeholder otherwise.
+ * Cannot prove existence or offline, only live.
+ */
+async function twitchPreviewLive(login) {
+	const res = await fetch(`https://static-cdn.jtvnw.net/previews-ttv/live_user_${login}-640x360.jpg`, {
+		method: 'HEAD',
+		redirect: 'manual',
+		signal: AbortSignal.timeout(5_000),
+	});
+	return res.status === 200;
+}
+
+/** Twitch: GQL stream presence. The page HTML has no live signal (og:title is "Name - Twitch" either way). */
 async function twitch(ref) {
 	const login = ref.replace(/^@/, '').toLowerCase();
-	const $ = await load(`https://www.twitch.tv/${encodeURIComponent(login)}`);
-	const title = $?.('meta[property="og:title"]').attr('content');
-	if (!title) return { live: false, found: false };
-	const live = / - Live on Twitch$/.test(title);
-	const avatar = $('meta[property="og:image"]').attr('content') || null;
-	// deleted, banned, or never existed: Twitch still serves a page, with its generic logo
-	let offline = null;
-	if (!live) {
-		const user = await twitchUser(login);
-		if (user ? !user.exists : avatar?.includes('ttv-static-metadata')) return { live: false, found: false };
-		offline = user?.offlineImage || null;
-	}
+	const user = await twitchUser(login);
+	if (user && !user.exists) return { live: false, found: false };
+	// GQL down: the preview CDN can still prove live, but never offline, so anything else throws
+	// and callers see 502 while cached answers keep serving
+	if (!user && !(await twitchPreviewLive(login).catch(() => false))) throw new Error('twitch gql not reachable');
+	const { live = true, avatar = null, offlineImage: offline = null } = user || {};
 	// public live preview, no key needed
 	const thumbnail = live ? `https://static-cdn.jtvnw.net/previews-ttv/live_user_${login}-640x360.jpg` : offline || avatar;
 	return {

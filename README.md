@@ -4,8 +4,10 @@ Is this channel streaming right now? One HTTP call, one boolean, no API keys.
 
 YouTube and Twitch both announce live status on their public channel pages. `theystill.live` fetches that page, reads a single marker out of the HTML with `cheerio`, and answers true or false. No developer account, no OAuth, no login, no quota.
 
-- YouTube: `youtube.com/@handle/live` redirects to the watch page only while streaming, so `link[rel=canonical]` pointing at `/watch?v=` means live.
-- Twitch: `og:title` reads `Name - Live on Twitch` only while streaming.
+- YouTube: `youtube.com/@handle/live` redirects to the watch page only while streaming, so `link[rel=canonical]` pointing at `/watch?v=` means live, with fallbacks on the embedded player payload.
+- Twitch: the page HTML carries no live markers, so Twitch's public GraphQL endpoint (key-free web `client-id`) answers via its `stream` object.
+
+The full signal chain per platform is in [ALGORITHM.md](ALGORITHM.md).
 
 ## Run
 
