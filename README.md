@@ -60,6 +60,24 @@ Response:
 | `age` | seconds since the upstream page was last scraped |
 | `ttl` | seconds an answer is cached before a fresh scrape |
 
+### Several channels at once
+
+Comma-separate the refs. Prefix an entry with `platform:` to mix YouTube and Twitch in one call. Up to 10 channels per request.
+
+```bash
+curl localhost:3000/twitch/lofigirl,ludwig
+curl localhost:3000/yt/@lofigirl,twitch:ludwig
+```
+
+```json
+{
+	"results": [{ "platform": "yt", "ref": "@lofigirl", "live": true, "...": "..." }, { "platform": "twitch", "ref": "ludwig", "live": false, "...": "..." }],
+	"live": ["yt:@lofigirl"]
+}
+```
+
+`live` is the shortlist of whoever is streaming, so a caller can skip walking `results`. A single ref still returns the flat object, unchanged. One channel failing does not sink the batch - that entry carries its own `error` while the rest return normally. Each channel in a batch spends one unit of the per-IP budget.
+
 Errors return a JSON `error` field with the status: `400` bad ref, `404` unknown platform, `405` non-GET, `429` rate limited, `503` scrape queue saturated, `502` upstream failure.
 
 ## Freshness

@@ -29,6 +29,23 @@ assert.equal((await get('/yt/' + encodeURIComponent('https://evil.test/x'))).sta
 assert.equal((await get('/yt/' + encodeURIComponent('bad ref!'))).status, 400, 'illegal chars rejected');
 assert.equal((await get('/yt/%E0%A4%A')).status, 400, 'undecodable ref rejected');
 
+/** Batch: comma-separated refs, and "platform:ref" entries mix platforms in one call. */
+const batch = await (await get('/twitch/lofigirl,ludwig')).json();
+assert.equal(batch.results.length, 2);
+assert.ok(batch.results.every((r) => r.platform === 'twitch'));
+assert.deepEqual(
+	batch.live,
+	batch.results.filter((r) => r.live).map((r) => `${r.platform}:${r.ref}`),
+);
+
+const mixed = await (await get('/yt/@lofigirl,twitch:ludwig')).json();
+assert.deepEqual(
+	mixed.results.map((r) => r.platform),
+	['yt', 'twitch'],
+);
+assert.equal((await get('/yt/' + Array.from({ length: 11 }, (_, i) => `chan${i}`).join(','))).status, 400, 'batch cap enforced');
+assert.equal((await get('/yt/@lofigirl,bad ref!')).status, 400, 'one bad ref rejects the batch');
+
 /** Cache: the second hit is served from memory, so age only grows. */
 const first = await (await get('/twitch/lofigirl')).json();
 const second = await (await get('/twitch/lofigirl')).json();

@@ -102,7 +102,16 @@
 			details[open] summary { color: #ccc; }
 			/* opens upward, the chip sits at the bottom of the screen */
 			.panel { position: absolute; left: 0; right: 0; bottom: calc(100% + .4rem); border-radius: .5rem; background: var(--panel); box-shadow: 0 1.2rem 2.5rem -.8rem #000c, 0 0 0 1px #ffffff0f; }
-			.req { padding: .6rem .8rem; color: #9a9aa5; font-family: ui-monospace, monospace; word-break: break-all; box-shadow: inset 0 -1px 0 #ffffff0f; }
+			.tabs { display: flex; gap: .3rem; padding: .4rem .5rem 0; }
+			.pt { padding: .25rem .6rem; border-radius: .35rem .35rem 0 0; background: transparent; color: #6a6a72; font-size: .8rem; }
+			.pt[aria-selected='true'] { color: #eee; background: #ffffff0f; }
+			.req { padding: .6rem .8rem; color: #9a9aa5; font-family: ui-monospace, monospace; word-break: break-all; box-shadow: inset 0 -1px 0 #ffffff0f, inset 0 1px 0 #ffffff0f; }
+			.docs { padding: .3rem .8rem .8rem; max-height: 40vh; overflow: auto; line-height: 1.6; }
+			.docs p { margin: .7rem 0 .3rem; }
+			.docs b { color: #ccc; font-weight: 600; }
+			.docs code { display: block; color: #9a9aa5; font-family: ui-monospace, monospace; font-size: .8rem; }
+			.docs li code, .docs p code { display: inline; color: #4ade80; }
+			.docs ul { margin: .2rem 0; padding-left: 1.1rem; }
 			.verb { color: #4ade80; font-weight: 700; }
 			pre { margin: 0; padding: .8rem; max-height: 40vh; overflow: auto; color: #ccc; }
 			footer { margin-top: 2rem; color: #5a5a63; font-size: .75rem; text-align: left; }
@@ -138,11 +147,39 @@
 				</button>
 			</form>
 			<div id="out"></div>
-			<details id="raw" hidden>
+			<details id="raw">
 				<summary>API</summary>
 				<div class="panel">
-					<div class="req"><span class="verb">GET</span> <span id="reqUrl"></span></div>
-					<pre id="json"></pre>
+					<div class="tabs" role="tablist">
+						<button type="button" class="pt" data-view="res" aria-selected="true" role="tab">response</button>
+						<button type="button" class="pt" data-view="docs" aria-selected="false" role="tab">docs</button>
+					</div>
+					<div data-view="res">
+						<div class="req"><span class="verb">GET</span> <span id="reqUrl">-</span></div>
+						<pre id="json">run a check to see the response</pre>
+					</div>
+					<div data-view="docs" hidden>
+						<div class="docs">
+							<p><b>One channel</b></p>
+							<code>GET /yt/@lofigirl</code>
+							<code>GET /yt/UCSJ4gkVC6NrvII8umztf0Ow</code>
+							<code>GET /twitch/ludwig</code>
+							<p><b>Several at once</b> - comma-separated, up to 10. Prefix with <code>platform:</code> to mix.</p>
+							<code>GET /twitch/lofigirl,ludwig</code>
+							<code>GET /yt/@lofigirl,twitch:ludwig</code>
+							<p>Batches answer <code>{ results: [...], live: ["yt:@lofigirl"] }</code>.</p>
+							<p><b>Fields</b></p>
+							<ul>
+								<li><code>live</code> streaming right now</li>
+								<li><code>found</code> channel exists</li>
+								<li><code>id</code> stable ref - YouTube channel id, Twitch login</li>
+								<li><code>url</code> watch link while live</li>
+								<li><code>thumbnail</code> + <code>art</code> preview, offline art, banner, or avatar</li>
+								<li><code>age</code> / <code>ttl</code> seconds since the scrape, and its lifetime</li>
+							</ul>
+							<p><b>Limits</b> - 20 requests per minute per IP, one channel per unit. Answers are cached 60s, so polling is free inside that window. No key, no login.</p>
+						</div>
+					</div>
 				</div>
 			</details>
 			<footer>
@@ -154,6 +191,14 @@
 			const out = document.getElementById('out');
 			const tabs = [...document.querySelectorAll('.tab')];
 			let timer, checkedAt, platform = 'yt';
+
+			// response / docs tabs inside the floating panel
+			document.querySelectorAll('.pt').forEach((btn) =>
+				btn.addEventListener('click', () => {
+					document.querySelectorAll('.pt').forEach((b) => b.setAttribute('aria-selected', String(b === btn)));
+					document.querySelectorAll('.panel > [data-view]').forEach((v) => (v.hidden = v.dataset.view !== btn.dataset.view));
+				}),
+			);
 
 			/** Same 16/9 box in every state. Real art fills it, a bare avatar sits centered instead. */
 			function frame(src, art) {
