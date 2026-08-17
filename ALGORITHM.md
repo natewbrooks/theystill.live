@@ -6,12 +6,10 @@ How `server.js` decides `live: true` without API keys. Each platform runs a chai
 
 Fetch `youtube.com/@handle/live` (or `/channel/UC.../live`) with a browser user agent and consent cookies (`SOCS=CAI; CONSENT=YES+1`) so datacenter IPs skip the consent interstitial.
 
-1. **Canonical redirect.** While streaming, `/live` serves a watch page whose `link[rel=canonical]` points at `/watch?v=<id>`. Offline, canonical points back at the channel. This is the primary signal.
-2. **Embedded player payload.** Some page variants (datacenter IPs) keep the channel URL and no watch canonical. Parse `ytInitialPlayerResponse` and accept its `videoDetails` only when:
-   - `channelId` matches the channel being asked about, and
-   - `isLiveNow` is true, or the page renders live-only text: `" watching now"` or `"Started streaming ..."`.
+1. **Canonical redirect.** While streaming, `/live` serves a watch page whose `link[rel=canonical]` points at `/watch?v=<id>`. Offline, canonical points back at the channel. This is the primary signal. The datacenter variant serves `href="undefined"` (literally), which never matches and pushes into the fallbacks.
+2. **Embedded player payload.** Some page variants keep the channel URL and no watch canonical. Parse `ytInitialPlayerResponse` and accept its `videoDetails` only when `isLiveNow` is true and `channelId` matches the channel being asked about.
 3. **Unreadable page guard.** No canonical and no verified video means the page shape is unknown. Throw instead of answering, so a live channel is never reported offline off a broken scrape.
-4. **Candidate sweep (`ytLiveFallback`).** If the page shows a `LIVE` badge (`"text":"LIVE"` / `"style":"LIVE"`) but no verified video, take up to 5 distinct `videoId`s from the page and fetch each watch page. Accept the first whose own `videoDetails` says it is live now and belongs to this channel.
+4. **Candidate sweep (`ytLiveFallback`).** If the page shows a `LIVE` badge (`"text":"LIVE"` / `"style":"LIVE"`) or live-only text (`" watching now"` / `"Started streaming ..."`) but no verified video, take up to 5 distinct `videoId`s from the page and confirm each over the key-free innertube endpoint (`POST youtubei/v1/player`). Accept the first whose `videoDetails` has `isLive` and this channel's `channelId`. Watch pages cannot be used here: YouTube answers them with `429` from datacenter IPs, while the innertube JSON endpoint responds.
 
 The channel ownership check in steps 2 and 4 exists because a channel page embeds `videoId`s of unrelated videos. Without it, a recommended stream from a different channel can be reported as this channel's stream. The channel's own id comes only from sources that name the page itself, in order: a `channel/UC...` canonical or `og:url`, then `externalChannelId`, then `browseId`. A page-wide `channel/UC...` match is never used, it picks up recommended channels. When no own id can be extracted, the candidate sweep refuses to guess.
 

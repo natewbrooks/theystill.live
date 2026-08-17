@@ -68,29 +68,34 @@ function playerDetails(html) {
 }
 
 /**
+ * Key-free innertube lookup for one video. Datacenter IPs get 429 on watch pages, but this
+ * JSON endpoint answers, with isLive set only while the video is streaming.
+ * @returns {Promise<object|null>} videoDetails, or null when unavailable
+ */
+async function ytVideoDetails(videoId) {
+	const res = await fetch('https://www.youtube.com/youtubei/v1/player', {
+		method: 'POST',
+		headers: { 'content-type': 'application/json', 'user-agent': UA },
+		body: JSON.stringify({ videoId, context: { client: { clientName: 'WEB', clientVersion: '2.20250801.00.00' } } }),
+		signal: AbortSignal.timeout(10_000),
+	});
+	if (!res.ok) throw new Error(`upstream ${res.status}`);
+	return (await res.json())?.videoDetails || null;
+}
+
+/**
  * Datacenter IPs get a page variant that skips the /live redirect, so the canonical trick fails there.
- * The LIVE badge still shows up, so take the candidate video ids and confirm one on its watch page.
+ * The LIVE badge or live-only text still shows up, so confirm candidate video ids over innertube.
  * Candidates can be unrelated videos from the page, so each must be live AND belong to this channel.
  * @returns {Promise<string|null>} the live video id, or null
  */
 async function ytLiveFallback(html, channelId) {
 	// without the channel's own id there is no way to tell its stream from a recommended one, so never guess
-	if (!channelId || !/"text":"LIVE"|"style":"LIVE"/.test(html)) return null;
+	if (!channelId || !(/"text":"LIVE"|"style":"LIVE"/.test(html) || YT_LIVE_TEXT.test(html))) return null;
 	const ids = [...new Set([...html.matchAll(/"videoId":"([\w-]{11})"/g)].map((m) => m[1]))].slice(0, 5);
 	for (const id of ids) {
-		const $ = await load(`https://www.youtube.com/watch?v=${id}`, { cookie: YT_COOKIE }).catch((e) => {
-			console.log('yt-fb-err', id, e.message);
-			return null;
-		});
-		const vd = $ && playerDetails($.html);
-		// TEMP DEBUG: remove after diagnosing datacenter page variant
-		console.log('yt-fb', id, JSON.stringify({
-			page: Boolean($),
-			player: $ && /ytInitialPlayerResponse/.test($.html),
-			vd: vd && { videoId: vd.videoId, channelId: vd.channelId, isLiveNow: vd.isLiveNow },
-			liveText: $ && YT_LIVE_TEXT.test($.html),
-		}));
-		if (vd?.videoId === id && vd.channelId === channelId && (vd.isLiveNow || YT_LIVE_TEXT.test($.html))) return id;
+		const vd = await ytVideoDetails(id).catch(() => null);
+		if (vd?.videoId === id && vd.channelId === channelId && vd.isLive) return id;
 	}
 	return null;
 }
@@ -111,25 +116,10 @@ async function yt(ref) {
 		$.html.match(/"externalChannelId":"(UC[\w-]{22})"|"browseId":"(UC[\w-]{22})"/)?.slice(1).find(Boolean) ||
 		null;
 	let video = canonical.match(/[?&]v=([\w-]{11})/)?.[1];
-	// TEMP DEBUG: remove after diagnosing datacenter page variant
-	console.log('yt-debug', JSON.stringify({
-		ref,
-		len: $.html.length,
-		canonical,
-		id,
-		ogImage: Boolean($('meta[property="og:image"]').attr('content')),
-		player: /ytInitialPlayerResponse/.test($.html),
-		badge: /"text":"LIVE"|"style":"LIVE"/.test($.html),
-		liveText: YT_LIVE_TEXT.test($.html),
-		isLiveNow: /"isLiveNow":true/.test($.html),
-		vids: [...new Set([...$.html.matchAll(/"videoId":"([\w-]{11})"/g)].map((m) => m[1]))].slice(0, 5),
-	}));
 	// no canonical: trust the embedded player payload only when it names this channel's own live video
 	if (!video) {
 		const vd = playerDetails($.html);
-		// TEMP DEBUG: remove after diagnosing datacenter page variant
-		console.log('yt-vd', JSON.stringify(vd && { videoId: vd.videoId, channelId: vd.channelId, isLiveNow: vd.isLiveNow }));
-		if (vd && (!id || vd.channelId === id) && (vd.isLiveNow || YT_LIVE_TEXT.test($.html))) video = vd.videoId;
+		if (vd?.isLiveNow && (!id || vd.channelId === id)) video = vd.videoId;
 	}
 	// never report a live channel as offline just because the page was unreadable
 	if (!canonical && !video) throw new Error('youtube page not readable');
