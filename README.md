@@ -1,8 +1,8 @@
-# amilive
+# theystill.live
 
 Is this channel streaming right now? One HTTP call, one boolean, no API keys.
 
-YouTube and Twitch both announce live status on their public channel pages. `amilive` fetches that page, reads a single marker out of the HTML with `cheerio`, and answers true or false. No developer account, no OAuth, no login, no quota.
+YouTube and Twitch both announce live status on their public channel pages. `theystill.live` fetches that page, reads a single marker out of the HTML with `cheerio`, and answers true or false. No developer account, no OAuth, no login, no quota.
 
 - YouTube: `youtube.com/@handle/live` redirects to the watch page only while streaming, so `link[rel=canonical]` pointing at `/watch?v=` means live.
 - Twitch: `og:title` reads `Name - Live on Twitch` only while streaming.
@@ -19,7 +19,7 @@ Only dependency is `cheerio`. The HTTP server is `node:http`.
 
 ## Usage
 
-Open `http://localhost:3000`, type a handle, and the page polls for you. Deep link straight to a channel with `#yt/@lofigirl` or `#twitch/lofigirl`.
+Open `http://localhost:3000`, type a handle, and the page polls for you. Deep link straight to a channel with `/yt/lofigirl` or `/twitch/lofigirl` - the same URL serves the page to browsers and JSON to API clients, decided by the `Accept` header.
 
 ## API
 
@@ -56,9 +56,20 @@ Response:
 | `found` | channel exists and the page parsed |
 | `id` | stable ref - YouTube channel id, or Twitch login |
 | `url` | live watch URL when live, else `null` |
+| `embed` | iframe player URL when live, else `null`. Twitch's carries a `parent=YOUR_DOMAIN` placeholder you replace with the host serving your page |
 | `thumbnail` | live preview when live, else channel avatar |
 | `age` | seconds since the upstream page was last scraped |
 | `ttl` | seconds an answer is cached before a fresh scrape |
+
+### Embedding the stream
+
+A live result carries `embed`, ready for an iframe:
+
+```html
+<iframe src="https://www.youtube.com/embed/0muHFBSiybw" allow="autoplay; fullscreen" allowfullscreen></iframe>
+```
+
+Twitch's player refuses to load unless `parent` names the host serving the page, which the API cannot know, so it returns `...&parent=YOUR_DOMAIN` for you to substitute. The bundled page fills it from `location.hostname` and only loads the player after a click, so nothing autoplays and polling never restarts a running stream.
 
 ### Several channels at once
 

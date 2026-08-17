@@ -6,6 +6,10 @@ const yt = await youtube('@lofigirl');
 assert.equal(yt.live, true, 'lofigirl youtube should be live');
 assert.match(yt.id, /^UC[\w-]{22}$/);
 assert.ok(yt.thumbnail, 'live result carries a thumbnail');
+assert.match(yt.embed, /^https:\/\/www\.youtube\.com\/embed\/[\w-]{11}$/, 'live result carries an embed url');
+
+const twLive = await twitch('lofigirl');
+if (twLive.live) assert.match(twLive.embed, /player\.twitch\.tv\/\?channel=lofigirl&parent=YOUR_DOMAIN/);
 
 const tw = await twitch('lofigirl');
 assert.equal(tw.found, true);

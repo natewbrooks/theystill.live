@@ -3,7 +3,7 @@
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<title>amilive | Free Stream Check for YouTube and Twitch</title>
+		<title>they still live? | Free Stream Check for YouTube and Twitch</title>
 		<meta
 			name="description"
 			content="Free live check for YouTube and Twitch. See if a channel is streaming right now, or call the free API for a true/false answer - no API keys, no login, no OAuth."
@@ -12,24 +12,24 @@
 		<meta name="author" content="Nate Brooks" />
 		<meta name="robots" content="index, follow, max-image-preview:large" />
 		<meta name="theme-color" content="#0e0e11" />
-		<link rel="canonical" href="https://amilive.up.railway.app/" />
+		<link rel="canonical" href="https://theystill.live/" />
 
 		<meta property="og:type" content="website" />
-		<meta property="og:site_name" content="amilive" />
-		<meta property="og:title" content="amilive | Free Stream Check for YouTube and Twitch" />
+		<meta property="og:site_name" content="theystill.live" />
+		<meta property="og:title" content="they still live? | Free Stream Check for YouTube and Twitch" />
 		<meta property="og:description" content="See if a YouTube or Twitch channel is live right now. Free API, no keys, no login." />
-		<meta property="og:url" content="https://amilive.up.railway.app/" />
+		<meta property="og:url" content="https://theystill.live/" />
 		<meta property="og:locale" content="en_US" />
 		<meta name="twitter:card" content="summary" />
-		<meta name="twitter:title" content="amilive | Free Stream Check for YouTube and Twitch" />
+		<meta name="twitter:title" content="they still live? | Free Stream Check for YouTube and Twitch" />
 		<meta name="twitter:description" content="See if a YouTube or Twitch channel is live right now. Free API, no keys, no login." />
 
 		<script type="application/ld+json">
 			{
 				"@context": "https://schema.org",
 				"@type": "WebApplication",
-				"name": "amilive",
-				"url": "https://amilive.up.railway.app/",
+				"name": "they still live?",
+				"url": "https://theystill.live/",
 				"applicationCategory": "DeveloperApplication",
 				"operatingSystem": "Any",
 				"description": "Free live-status checker and API for YouTube and Twitch channels. No API keys, no login.",
@@ -136,7 +136,7 @@
 	</head>
 	<body>
 		<main>
-			<h1>am i live?</h1>
+			<h1>they still live?</h1>
 			<p class="lede">Check if a YouTube or Twitch channel is streaming right now. No API keys, no login - scraped from the public channel page.</p>
 			<form id="f">
 				<div id="platform" role="radiogroup" aria-label="platform" data-active="yt">
@@ -192,9 +192,12 @@
 								<li><code>found</code> channel exists</li>
 								<li><code>id</code> stable ref - YouTube channel id, Twitch login</li>
 								<li><code>url</code> watch link while live</li>
+								<li><code>embed</code> iframe player URL while live, else <code>null</code></li>
 								<li><code>thumbnail</code> + <code>art</code> preview, offline art, banner, or avatar</li>
 								<li><code>age</code> / <code>ttl</code> seconds since the scrape, and its lifetime</li>
 							</ul>
+							<p><b>Embedding</b> - drop <code>embed</code> straight into an iframe. Twitch needs its <code>parent</code> filled in with the host serving your page.</p>
+							<code>&lt;iframe src="{embed}" allowfullscreen&gt;&lt;/iframe&gt;</code>
 							<p><b>Limits</b> - 20 requests per minute per IP, one channel per unit. Answers are cached 60s, so polling is free inside that window. No key, no login.</p>
 						</div>
 					</div>
@@ -245,14 +248,10 @@
 				return `<div class="frame${cls}">${src ? `<img src="${src}" alt="" onerror="this.remove()" />` : ''}${play}</div>`;
 			}
 
-			/** Official iframe player for whichever platform this result came from. */
+			/** The API hands back an embed URL, Twitch's needs this page's host filling in. */
 			function embedSrc(d) {
-				if (d.platform === 'yt') {
-					const v = new URL(d.url).searchParams.get('v');
-					return `https://www.youtube.com/embed/${v}?autoplay=1`;
-				}
-				// parent has to match the host serving this page, so read it at runtime
-				return `https://player.twitch.tv/?channel=${encodeURIComponent(d.id)}&parent=${location.hostname}&autoplay=true`;
+				const base = d.embed.replace('YOUR_DOMAIN', location.hostname);
+				return `${base}${base.includes('?') ? '&' : '?'}autoplay=1`;
 			}
 
 			// click the poster to swap in the real player
@@ -320,7 +319,7 @@
 					playing = null;
 					render(
 						// cache-busted, so the live preview matches the poll
-						frame(d.thumbnail && `${d.thumbnail}?t=${Date.now()}`, d.art, d.live && d.url),
+						frame(d.thumbnail && `${d.thumbnail}?t=${Date.now()}`, d.art, d.live && d.embed),
 						`${d.live ? `<span class="live"><i class="dot"></i>LIVE</span>` : `<span class="off">offline</span>`}<span class="who">${body.results ? d.ref : ''}</span>`,
 						`${tally}${d.live && d.url ? `<a href="${d.url}" target="_blank" rel="noreferrer">watch</a> · ` : ''}`,
 					);

@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import * as cheerio from 'cheerio';
 
 const PORT = process.env.PORT || 3000;
-const SITE = process.env.SITE_URL || 'https://amilive.up.railway.app/'; // used by robots.txt and sitemap.xml
+const SITE = process.env.SITE_URL || 'https://theystill.live/'; // used by robots.txt and sitemap.xml
 const TTL = 60_000; // scrape a channel at most once per minute
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
@@ -69,6 +69,7 @@ async function yt(ref) {
 		found: true,
 		id: $.html.match(/"externalChannelId":"(UC[\w-]{22})"|channel\/(UC[\w-]{22})/)?.slice(1).find(Boolean) || null,
 		url: video ? canonical : null,
+		embed: video ? `https://www.youtube.com/embed/${video}` : null,
 		thumbnail,
 		art: video ? 'preview' : banner ? 'banner' : 'avatar',
 	};
@@ -117,6 +118,8 @@ async function twitch(ref) {
 		found: true,
 		id: login,
 		url: `https://www.twitch.tv/${login}`,
+		// Twitch requires parent to match the page hosting the iframe, so the caller fills it in
+		embed: live ? `https://player.twitch.tv/?channel=${login}&parent=YOUR_DOMAIN` : null,
 		thumbnail,
 		art: live ? 'preview' : offline ? 'offline' : 'avatar',
 	};
@@ -218,6 +221,6 @@ const server = createServer(async (req, res) => {
 	json(200, { results, live: results.filter((r) => r.live).map((r) => `${r.platform}:${r.ref}`) });
 });
 
-if (process.env.NODE_ENV !== 'test') server.listen(PORT, () => console.log(`amilive on :${PORT}`));
+if (process.env.NODE_ENV !== 'test') server.listen(PORT, () => console.log(`theystill.live on :${PORT}`));
 
 export { yt, twitch, server, RATE };
