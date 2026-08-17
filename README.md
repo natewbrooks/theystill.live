@@ -70,7 +70,7 @@ An answer is at most `ttl` (60s) old. Poll as often as you like - repeat calls i
 
 Being key-free means every request is a scrape someone else pays for, so the server is deliberately stingy:
 
-- 20 requests per minute per IP (`429` past that, with `retry-after`).
+- 20 requests per minute per IP. Past that the response is `429` with the seconds left in the window, both as a `retry-after` header and as `retryAfter` in the body (`"rate limited, try again in 34s"`).
 - One upstream fetch per channel per 60s, shared across all callers. Unknown channels are cached 5 minutes so junk lookups cannot amplify.
 - At most 4 concurrent upstream fetches. Beyond that, cached answers still serve and cache misses get `503`.
 - Handles are validated against `/^@?[A-Za-z0-9_.-]{2,60}$/`, so arbitrary URLs can never be fetched through this server.

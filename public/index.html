@@ -3,18 +3,85 @@
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<title>amilive</title>
+		<title>amilive | Free Stream Check for YouTube and Twitch</title>
+		<meta
+			name="description"
+			content="Free live check for YouTube and Twitch. See if a channel is streaming right now, or call the free API for a true/false answer - no API keys, no login, no OAuth."
+		/>
+		<meta name="keywords" content="is streamer live, youtube live check, twitch live check, stream status api, free live status api, no api key" />
+		<meta name="author" content="Nate Brooks" />
+		<meta name="robots" content="index, follow, max-image-preview:large" />
+		<meta name="theme-color" content="#0e0e11" />
+		<link rel="canonical" href="https://amilive.up.railway.app/" />
+
+		<meta property="og:type" content="website" />
+		<meta property="og:site_name" content="amilive" />
+		<meta property="og:title" content="amilive | Free Stream Check for YouTube and Twitch" />
+		<meta property="og:description" content="See if a YouTube or Twitch channel is live right now. Free API, no keys, no login." />
+		<meta property="og:url" content="https://amilive.up.railway.app/" />
+		<meta property="og:locale" content="en_US" />
+		<meta name="twitter:card" content="summary" />
+		<meta name="twitter:title" content="amilive | Free Stream Check for YouTube and Twitch" />
+		<meta name="twitter:description" content="See if a YouTube or Twitch channel is live right now. Free API, no keys, no login." />
+
+		<script type="application/ld+json">
+			{
+				"@context": "https://schema.org",
+				"@type": "WebApplication",
+				"name": "amilive",
+				"url": "https://amilive.up.railway.app/",
+				"applicationCategory": "DeveloperApplication",
+				"operatingSystem": "Any",
+				"description": "Free live-status checker and API for YouTube and Twitch channels. No API keys, no login.",
+				"offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+				"author": { "@type": "Person", "name": "Nate Brooks", "url": "https://github.com/natewbrooks" }
+			}
+		</script>
+
+		<!-- inline icon, so browsers stop requesting /favicon.ico and logging 404s -->
+		<link
+			rel="icon"
+			href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230e0e11'/><circle cx='16' cy='16' r='7' fill='%23ef4444'/></svg>"
+		/>
 		<style>
-			:root { color-scheme: dark; }
+			:root { color-scheme: dark; --panel: #17171c; }
 			body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #0e0e11; color: #eee; font: 16px/1.5 system-ui, sans-serif; }
 			main { width: min(520px, 90vw); text-align: center; }
 			h1 { font-size: 1.4rem; font-weight: 600; letter-spacing: .04em; }
 			form { display: flex; gap: .5rem; }
-			select, input, button { padding: .7rem .8rem; border-radius: .5rem; border: 1px solid #333; background: #17171c; color: inherit; font: inherit; }
+			/* border: 0 kills the browser default, which showed up once the custom border went away */
+			input, button { padding: .7rem .8rem; border: 0; border-radius: .5rem; background: var(--panel); color: inherit; font: inherit; }
+			/* no focus ring, and no focus tint either, every panel stays one color */
+			input, button { outline: none; }
 			input { flex: 1; }
 			button { cursor: pointer; }
-			#out { margin-top: 2rem; font-size: 2rem; font-weight: 700; }
-			#out img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: .6rem; border: 1px solid #333; margin-bottom: 1rem; }
+			#go { display: grid; place-items: center; padding: .6rem .75rem; color: #9a9aa5; }
+			#go:hover { color: #eee; }
+			#go svg { width: 1.3rem; height: 1.3rem; fill: currentColor; }
+			/* one shared shell, the lit segment marks the active platform */
+			#platform { position: relative; display: flex; padding: .2rem .4rem; border-radius: .5rem; background: var(--panel); }
+			/* the glow itself slides between the two logos */
+			#glow { position: absolute; top: 0; bottom: 0; left: .4rem; width: calc(50% - .4rem); pointer-events: none; transition: transform .28s cubic-bezier(.4, 0, .2, 1), background .28s; background: radial-gradient(closest-side, #ff003340, transparent 80%); }
+			#platform[data-active='twitch'] #glow { transform: translateX(100%); background: radial-gradient(closest-side, #9146ff45, transparent 80%); }
+			.tab { position: relative; flex: 1; display: grid; place-items: center; padding: .3rem .45rem; border: 0; background: transparent; color: #55555d; transition: color .28s, filter .28s; }
+			.tab svg { width: 1.9rem; height: 1.9rem; fill: currentColor; }
+			.tab:hover { color: #8a8a94; }
+			.tab[aria-checked='true'].yt { color: #ff0033; }
+			.tab[aria-checked='true'].twitch { color: #9146ff; }
+			.tab[aria-checked='true'] svg { filter: drop-shadow(0 0 .5em currentColor); }
+			/* height reserved up front, so switching platforms never reflows the page */
+			/* reserve = frame (16/9) + 1rem gap + 3rem status line + .5rem gap + 1.2rem small line */
+			#out { margin-top: 2rem; font-size: 2rem; font-weight: 700; min-height: calc(90vw * 9 / 16 + 5.7rem); overflow: hidden; }
+			@media (min-width: 560px) { #out { min-height: calc(520px * 9 / 16 + 5.7rem); } }
+			.frame { display: grid; place-items: center; width: 100%; aspect-ratio: 16 / 9; margin-bottom: 1rem; overflow: hidden; border-radius: .6rem; background: var(--panel); }
+			/* contain, so a preview that is not exactly 16/9 never gets its edges cropped */
+			.frame img { width: 100%; height: 100%; object-fit: contain; }
+			/* real offline art fills the box, just dimmed */
+			.frame.dim img { opacity: .75; }
+			/* a channel banner is far wider than 16/9, crop it rather than letterbox */
+			.frame.banner img { object-fit: cover; }
+			/* nothing but an avatar to show: center it small instead of stretching */
+			.frame.avatar img { width: auto; height: 45%; border-radius: 50%; opacity: .5; filter: grayscale(.5); }
 			.live { color: #4ade80; }
 			.dot { display: inline-block; width: .55em; height: .55em; margin-right: .4em; vertical-align: middle; border-radius: 50%; background: #ef4444; box-shadow: 0 0 .6em #ef4444; animation: blink 1.2s steps(1, end) infinite; }
 			@keyframes blink { 50% { opacity: .15; } }
@@ -26,7 +93,7 @@
 			.lede { color: #9a9aa5; font-size: .9rem; text-align: center; margin: 0 0 1.5rem; }
 			details { margin-top: 1.5rem; text-align: left; color: #888; font-size: .85rem; }
 			summary { cursor: pointer; }
-			pre { background: #17171c; border: 1px solid #333; border-radius: .5rem; padding: .8rem; overflow-x: auto; color: #ccc; }
+			pre { background: var(--panel); border-radius: .5rem; padding: .8rem; overflow-x: auto; color: #ccc; }
 			footer { margin-top: 2rem; color: #5a5a63; font-size: .75rem; text-align: left; }
 		</style>
 	</head>
@@ -35,12 +102,29 @@
 			<h1>am i live?</h1>
 			<p class="lede">Check if a YouTube or Twitch channel is streaming right now. No API keys, no login - scraped from the public channel page.</p>
 			<form id="f">
-				<select id="platform">
-					<option value="yt">YouTube</option>
-					<option value="twitch">Twitch</option>
-				</select>
+				<div id="platform" role="radiogroup" aria-label="platform" data-active="yt">
+					<span id="glow" aria-hidden="true"></span>
+					<button type="button" class="tab yt" data-platform="yt" aria-checked="true" role="radio" aria-label="YouTube" title="YouTube">
+						<svg viewBox="0 0 24 24" aria-hidden="true">
+							<path
+								d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"
+							/>
+						</svg>
+					</button>
+					<button type="button" class="tab twitch" data-platform="twitch" aria-checked="false" role="radio" aria-label="Twitch" title="Twitch">
+						<svg viewBox="0 0 24 24" aria-hidden="true">
+							<path
+								d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"
+							/>
+						</svg>
+					</button>
+				</div>
 				<input id="ref" placeholder="@lofigirl" autocomplete="off" required />
-				<button>check</button>
+				<button id="go" aria-label="check" title="check">
+					<svg viewBox="0 0 24 24" aria-hidden="true">
+						<path d="M10 2a8 8 0 1 0 4.9 14.32l5.39 5.39 1.42-1.42-5.39-5.39A8 8 0 0 0 10 2zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12z" />
+					</svg>
+				</button>
 			</form>
 			<div id="out"></div>
 			<details id="raw" hidden>
@@ -54,7 +138,33 @@
 		</main>
 		<script>
 			const out = document.getElementById('out');
-			let timer, checkedAt;
+			const tabs = [...document.querySelectorAll('.tab')];
+			let timer, checkedAt, platform = 'yt';
+
+			/** Same 16/9 box in every state. Real art fills it, a bare avatar sits centered instead. */
+			function frame(src, art) {
+				const cls = art === 'avatar' ? ' avatar' : art === 'preview' ? '' : art === 'banner' ? ' dim banner' : ' dim';
+				return `<div class="frame${cls}">${src ? `<img src="${src}" alt="" onerror="this.remove()" />` : ''}</div>`;
+			}
+
+			/** Swap the result card. Status always lands in the same spot. */
+			function render(frameHtml, status, prefix = '') {
+				out.innerHTML = `<div class="card">${frameHtml}${status}<small>${prefix}<span id="ago"></span></small></div>`;
+			}
+
+			/** Light the picked platform and slide the glow to it. */
+			function setPlatform(next) {
+				if (!tabs.some((t) => t.dataset.platform === next)) return;
+				platform = next;
+				document.getElementById('platform').dataset.active = next;
+				tabs.forEach((t) => t.setAttribute('aria-checked', String(t.dataset.platform === next)));
+			}
+			tabs.forEach((t) =>
+				t.addEventListener('click', () => {
+					setPlatform(t.dataset.platform);
+					if (document.getElementById('ref').value.trim()) document.getElementById('f').requestSubmit();
+				}),
+			);
 
 			/** Show how stale the cached scrape is, refreshed every 10s. */
 			function tick() {
@@ -70,43 +180,49 @@
 			/** Poll the API for one channel and keep the answer fresh. */
 			async function check(platform, ref) {
 				try {
-					const res = await fetch(`/${platform}/${encodeURIComponent(ref)}`);
+					// the same path serves the page to browsers, so ask for JSON explicitly
+					const res = await fetch(`/${platform}/${encodeURIComponent(ref)}`, { headers: { accept: 'application/json' } });
 					const d = await res.json();
 					document.getElementById('json').textContent = JSON.stringify(d, null, 2);
 					document.getElementById('raw').hidden = false;
-					if (d.error) return (out.textContent = d.error);
-					if (!d.found) return (out.innerHTML = `<span class="off">not found</span>`);
-					// bust the CDN cache so the live preview matches the poll
-					const thumb = d.thumbnail ? `<img src="${d.thumbnail}?t=${Date.now()}" alt="" onerror="this.remove()" />` : '';
+					if (d.error) return render(frame(), `<span class="off">${d.error}</span>`);
+					if (!d.found) return render(frame(), `<span class="off">not found</span>`);
 					checkedAt = Date.now() - d.age * 1000; // server age avoids client clock skew
-					out.innerHTML = d.live
-						? `${thumb}<span class="live"><i class="dot"></i>LIVE</span><small>${d.url ? `<a href="${d.url}" target="_blank" rel="noreferrer">watch</a> · ` : ''}<span id="ago"></span></small>`
-						: `${thumb}<span class="off">offline</span><small><span id="ago"></span></small>`;
+					render(
+						// cache-busted, so the live preview matches the poll
+						frame(d.thumbnail && `${d.thumbnail}?t=${Date.now()}`, d.art),
+						d.live ? `<span class="live"><i class="dot"></i>LIVE</span>` : `<span class="off">offline</span>`,
+						d.live && d.url ? `<a href="${d.url}" target="_blank" rel="noreferrer">watch</a> · ` : '',
+					);
 					tick();
 				} catch {
-					out.textContent = 'network error';
+					render(frame(), `<span class="off">network error</span>`);
 				}
 			}
 
 			document.getElementById('f').addEventListener('submit', (e) => {
 				e.preventDefault();
-				const platform = document.getElementById('platform').value;
 				const ref = document.getElementById('ref').value.trim();
 				if (!ref) return;
+				const p = platform; // pin, so a later toggle cannot hijack this poll
 				clearInterval(timer);
-				location.hash = `${platform}/${ref}`;
-				out.textContent = 'checking…';
-				check(platform, ref);
-				timer = setInterval(() => check(platform, ref), 20_000);
+				const path = `/${p}/${encodeURIComponent(ref)}`;
+				if (location.pathname !== path) history.pushState({}, '', path); // no dupe entry when replaying a back/forward
+				if (!out.querySelector('.frame')) render(frame(), `<span class="off">checking…</span>`); // keep any existing card, no flicker
+				check(p, ref);
+				timer = setInterval(() => check(p, ref), 20_000);
 			});
 
-			// deep link: #yt/@adamcyounis
-			const [platform, ...rest] = decodeURIComponent(location.hash.slice(1)).split('/');
-			if (rest.length) {
-				document.getElementById('platform').value = platform;
-				document.getElementById('ref').value = rest.join('/');
+			/** Run whatever /platform/handle the address bar holds. */
+			function fromPath() {
+				const [, linked, ref] = location.pathname.split('/');
+				if (!ref) return;
+				setPlatform(linked);
+				document.getElementById('ref').value = decodeURIComponent(ref);
 				document.getElementById('f').requestSubmit();
 			}
+			addEventListener('popstate', fromPath);
+			fromPath();
 		</script>
 	</body>
 </html>

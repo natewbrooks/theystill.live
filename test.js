@@ -41,7 +41,11 @@ for (let i = 0; i < RATE.max + 5; i++) {
 	const res = await get('/twitch/lofigirl');
 	if (res.status === 429) {
 		limited += 1;
-		assert.ok(res.headers.get('retry-after'), '429 carries retry-after');
+		const body = await res.json();
+		assert.ok(Number(res.headers.get('retry-after')) > 0, '429 carries retry-after');
+		assert.ok(body.retryAfter > 0 && body.retryAfter <= RATE.window / 1000, 'cooldown is within the window');
+		assert.match(body.error, /try again in \d+s/, '429 names the cooldown');
+		continue;
 	}
 	await res.arrayBuffer();
 }
