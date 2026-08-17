@@ -15,7 +15,7 @@ const MAX_SCRAPES = 4; // concurrent upstream fetches
 const MAX_BATCH = 10; // channels per request
 const MAX_BYTES = 4 << 20; // refuse absurd upstream responses
 const REF = /^@?[A-Za-z0-9_.-]{2,60}$/; // channel handles only, never arbitrary paths
-const STATIC = { 'troll.svg': 'image/svg+xml', 'og.png': 'image/png' };
+const STATIC = { 'troll.svg': 'image/svg+xml', 'og.png': 'image/png', 'lexend-400.woff2': 'font/woff2', 'lexend-700.woff2': 'font/woff2' };
 const BUILT = new Date().toISOString().slice(0, 10); // sitemap lastmod, stamped at boot
 
 const cache = new Map(); // key -> { at, ttl, value }
@@ -176,7 +176,9 @@ async function sendPage(req, res) {
 }
 
 const server = createServer(async (req, res) => {
-	const json = (code, body, headers) => res.writeHead(code, { 'content-type': 'application/json', ...headers }).end(JSON.stringify(body));
+	// read-only public API, so any origin may call it
+	const json = (code, body, headers) =>
+		res.writeHead(code, { 'content-type': 'application/json', 'access-control-allow-origin': '*', ...headers }).end(JSON.stringify(body));
 	if (req.method !== 'GET') return json(405, { error: 'GET only' });
 	if (req.url.length > 200) return json(414, { error: 'url too long' });
 
