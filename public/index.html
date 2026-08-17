@@ -38,7 +38,7 @@
 					<option value="yt">YouTube</option>
 					<option value="twitch">Twitch</option>
 				</select>
-				<input id="ref" placeholder="@adamcyounis" autocomplete="off" required />
+				<input id="ref" placeholder="@lofigirl" autocomplete="off" required />
 				<button>check</button>
 			</form>
 			<div id="out"></div>
@@ -65,7 +65,7 @@
 					if (d.error) return (out.textContent = d.error);
 					if (!d.found) return (out.innerHTML = `<span class="off">not found</span>`);
 					// bust the CDN cache so the live preview matches the poll
-					const thumb = d.thumb ? `<img src="${d.thumb}?t=${Date.now()}" alt="" onerror="this.remove()" />` : '';
+					const thumb = d.thumbnail ? `<img src="${d.thumbnail}?t=${Date.now()}" alt="" onerror="this.remove()" />` : '';
 					out.innerHTML = d.live
 						? `${thumb}<span class="live"><i class="dot"></i>LIVE</span><small>${d.url ? `<a href="${d.url}" target="_blank" rel="noreferrer">watch</a> · ` : ''}checked just now</small>`
 						: `${thumb}<span class="off">offline</span><small>rechecking every minute</small>`;

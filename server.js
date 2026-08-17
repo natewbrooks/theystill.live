@@ -1,24 +1,12 @@
-import express from 'express';
+import { createServer } from 'node:http';
+import { readFile } from 'node:fs/promises';
 import * as cheerio from 'cheerio';
 
 const PORT = process.env.PORT || 3000;
-const TTL = 60_000; // upstream scrape at most once per minute per channel
+const TTL = 60_000; // scrape a channel at most once per minute
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
-/** channel key -> { at, value } */
-const cache = new Map();
-
-/** Scrape at most once per TTL per key, share in-flight promise. */
-function cached(key, fn) {
-	const hit = cache.get(key);
-	if (hit && Date.now() - hit.at < TTL) return hit.value;
-	const value = fn().catch((err) => {
-		cache.delete(key);
-		throw err;
-	});
-	cache.set(key, { at: Date.now(), value });
-	return value;
-}
+const cache = new Map(); // key -> { at, value }
 
 async function load(url) {
 	const res = await fetch(url, { headers: { 'user-agent': UA, 'accept-language': 'en-US,en;q=0.9' } });
@@ -29,34 +17,29 @@ async function load(url) {
 }
 
 /**
- * YouTube: /live redirects to the live watch page when live.
- * @param {string} ref handle (with or without @) or UC... channel id
+ * YouTube: /live redirects to the watch page only while streaming.
+ * @param {string} ref handle or UC... channel id
  */
-async function youtube(ref) {
+async function yt(ref) {
 	const path = /^UC[\w-]{22}$/.test(ref) ? `channel/${ref}` : `@${ref.replace(/^@/, '')}`;
 	const $ = await load(`https://www.youtube.com/${path}/live`);
 	if (!$) return { live: false, found: false };
 	const canonical = $('link[rel="canonical"]').attr('href') || '';
-	const channelId = $.html.match(/"externalChannelId":"(UC[\w-]{22})"|channel\/(UC[\w-]{22})/)?.slice(1).find(Boolean) || null;
-	const videoId = canonical.match(/[?&]v=([\w-]{11})/)?.[1] || null;
+	const video = canonical.match(/[?&]v=([\w-]{11})/)?.[1];
 	return {
-		live: Boolean(videoId),
+		live: Boolean(video),
 		found: true,
-		id: channelId,
-		url: videoId ? canonical : null,
-		thumb: videoId ? `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg` : $('meta[property="og:image"]').attr('content') || null,
+		id: $.html.match(/"externalChannelId":"(UC[\w-]{22})"|channel\/(UC[\w-]{22})/)?.slice(1).find(Boolean) || null,
+		url: video ? canonical : null,
+		thumbnail: video ? `https://i.ytimg.com/vi/${video}/maxresdefault.jpg` : $('meta[property="og:image"]').attr('content') || null,
 	};
 }
 
-/**
- * Twitch: og:title reads "name - Live on Twitch" only while streaming.
- * @param {string} ref login name
- */
+/** Twitch: og:title ends "- Live on Twitch" only while streaming. */
 async function twitch(ref) {
 	const login = ref.replace(/^@/, '').toLowerCase();
 	const $ = await load(`https://www.twitch.tv/${encodeURIComponent(login)}`);
-	if (!$) return { live: false, found: false };
-	const title = $('meta[property="og:title"]').attr('content') || '';
+	const title = $?.('meta[property="og:title"]').attr('content');
 	if (!title) return { live: false, found: false };
 	const live = / - Live on Twitch$/.test(title);
 	return {
@@ -64,30 +47,37 @@ async function twitch(ref) {
 		found: true,
 		id: login,
 		url: `https://www.twitch.tv/${login}`,
-		// live preview is public, no key needed; falls back to profile image when offline
-		thumb: live
-			? `https://static-cdn.jtvnw.net/previews-ttv/live_user_${login}-640x360.jpg`
-			: $('meta[property="og:image"]').attr('content') || null,
+		// public live preview, no key needed
+		thumbnail: live ? `https://static-cdn.jtvnw.net/previews-ttv/live_user_${login}-640x360.jpg` : $('meta[property="og:image"]').attr('content') || null,
 	};
 }
 
-const providers = { yt: youtube, twitch };
+const providers = { yt, twitch };
 
-const app = express();
-app.use(express.static('public'));
+createServer(async (req, res) => {
+	const [, platform, ref] = req.url.split('?')[0].split('/');
+	const json = (code, body) => res.writeHead(code, { 'content-type': 'application/json' }).end(JSON.stringify(body));
 
-app.get('/:platform/:ref', async (req, res) => {
-	const { platform, ref } = req.params;
-	const provider = providers[platform];
-	if (!provider) return res.status(404).json({ error: 'unknown platform' });
-	try {
-		const data = await cached(`${platform}:${ref.toLowerCase()}`, () => provider(ref));
-		res.set('cache-control', 'public, max-age=30').json({ platform, ref, ...data, ttl: TTL / 1000 });
-	} catch (err) {
-		res.status(502).json({ error: String(err.message) });
+	if (!ref) {
+		const html = await readFile(new URL('./public/index.html', import.meta.url));
+		return res.writeHead(200, { 'content-type': 'text/html' }).end(html);
 	}
+	if (!providers[platform]) return json(404, { error: 'unknown platform' });
+
+	const key = `${platform}:${ref.toLowerCase()}`;
+	const hit = cache.get(key);
+	if (!hit || Date.now() - hit.at > TTL) {
+		const value = providers[platform](decodeURIComponent(ref)).catch((err) => (cache.delete(key), Promise.reject(err)));
+		cache.set(key, { at: Date.now(), value });
+	}
+	try {
+		json(200, { platform, ref, ...(await cache.get(key).value), ttl: TTL / 1000 });
+	} catch (err) {
+		json(502, { error: err.message });
+	}
+}).listen(process.env.NODE_ENV === 'test' ? 0 : PORT, function () {
+	if (process.env.NODE_ENV === 'test') this.close();
+	else console.log(`amilive on :${PORT}`);
 });
 
-if (process.env.NODE_ENV !== 'test') app.listen(PORT, () => console.log(`amilive on :${PORT}`));
-
-export { youtube, twitch };
+export { yt, twitch };

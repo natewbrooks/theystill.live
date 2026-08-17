@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { youtube, twitch } from './server.js';
+import { yt as youtube, twitch } from './server.js';
 
 /** Hits the real sites: known 24/7 stream is live, bogus handle is not found. */
 const yt = await youtube('@lofigirl');
