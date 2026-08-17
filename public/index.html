@@ -136,6 +136,7 @@
 			/* no focus ring, and no focus tint either, every panel stays one color */
 			input, button { outline: none; }
 			input { flex: 1; }
+			input::placeholder { color: #33333a; opacity: 1; }
 			button { cursor: pointer; }
 			#go { display: grid; place-items: center; padding: .6rem .75rem; color: #9a9aa5; }
 			#go:hover { color: #eee; }
@@ -296,7 +297,7 @@
 					</button>
 				</div>
 				<div class="row">
-					<input id="ref" placeholder="adamcyounis" autocomplete="off" required />
+					<input id="ref" placeholder="e.g. lofigirl,adamcyounis,ludwig" autocomplete="off" required />
 					<button id="go" aria-label="check" title="check">
 						<svg viewBox="0 0 24 24" aria-hidden="true">
 							<path d="M10 2a8 8 0 1 0 4.9 14.32l5.39 5.39 1.42-1.42-5.39-5.39A8 8 0 0 0 10 2zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12z" />
