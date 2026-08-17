@@ -191,8 +191,10 @@
 			.nav.prev { left: .5rem; }
 			.nav.next { right: .5rem; }
 			.count { position: absolute; right: .6rem; top: .6rem; padding: .1rem .45rem; border-radius: .35rem; background: #000a; color: #ccc; font-size: .7rem; font-weight: 400; font-variant-numeric: tabular-nums; }
-			.live { color: #4ade80; }
-			.dot { display: inline-block; width: .55em; height: .55em; margin-right: .4em; vertical-align: middle; border-radius: 50%; background: #ef4444; box-shadow: 0 0 .6em #ef4444; animation: blink 1.2s steps(1, end) infinite; }
+			/* the word stays centered, the dot hangs off its left edge */
+			.live { position: relative; color: #ef4444; }
+			/* 48% not 50%: lines up with the cap height of LIVE, not the taller line box */
+			.dot { position: absolute; top: 51%; right: 100%; margin-right: .25em; transform: translateY(-50%); width: .45em; height: .45em; border-radius: 50%; background: #ef4444; box-shadow: 0 0 .6em #ef4444; animation: blink 1.2s steps(1, end) infinite; }
 			@keyframes blink { 50% { opacity: .15; } }
 			@media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
 			.off { color: #888; }
