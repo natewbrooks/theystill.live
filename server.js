@@ -7,6 +7,8 @@ const PORT = process.env.PORT || 3000;
 const SITE = process.env.SITE_URL || 'https://theystill.live/'; // used by robots.txt and sitemap.xml
 const TTL = 60_000; // scrape a channel at most once per minute
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+// datacenter IPs get YouTube's consent interstitial, which has no canonical link. These skip it.
+const YT_COOKIE = 'SOCS=CAI; CONSENT=YES+1';
 
 const NEG_TTL = 300_000; // unknown channels stay cached longer, junk lookups cannot amplify
 const RATE = { window: 60_000, max: 20 }; // per client IP
@@ -22,9 +24,9 @@ const cache = new Map(); // key -> { at, ttl, value }
 const hits = new Map(); // ip -> { count, resetAt }
 let scraping = 0;
 
-async function load(url) {
+async function load(url, extraHeaders = {}) {
 	const res = await fetch(url, {
-		headers: { 'user-agent': UA, 'accept-language': 'en-US,en;q=0.9' },
+		headers: { 'user-agent': UA, 'accept-language': 'en-US,en;q=0.9', ...extraHeaders },
 		signal: AbortSignal.timeout(10_000),
 		redirect: 'follow',
 	});
@@ -53,15 +55,35 @@ function allow(ip) {
 }
 
 /**
+ * Datacenter IPs get a page variant that skips the /live redirect, so the canonical trick fails there.
+ * The LIVE badge still shows up, so take the candidate video ids and confirm one on its watch page.
+ * @returns {Promise<string|null>} the live video id, or null
+ */
+async function ytLiveFallback(html) {
+	if (!/"text":"LIVE"|"style":"LIVE"/.test(html)) return null;
+	const ids = [...new Set([...html.matchAll(/"videoId":"([\w-]{11})"/g)].map((m) => m[1]))].slice(0, 3);
+	for (const id of ids) {
+		const $ = await load(`https://www.youtube.com/watch?v=${id}`, { cookie: YT_COOKIE }).catch(() => null);
+		if ($ && /"isLiveNow":true/.test($.html)) return id;
+	}
+	return null;
+}
+
+/**
  * YouTube: /live redirects to the watch page only while streaming.
  * @param {string} ref handle or UC... channel id
  */
 async function yt(ref) {
 	const path = /^UC[\w-]{22}$/.test(ref) ? `channel/${ref}` : `@${ref.replace(/^@/, '')}`;
-	const $ = await load(`https://www.youtube.com/${path}/live`);
+	const $ = await load(`https://www.youtube.com/${path}/live`, { cookie: YT_COOKIE });
 	if (!$) return { live: false, found: false };
 	const canonical = $('link[rel="canonical"]').attr('href') || '';
-	const video = canonical.match(/[?&]v=([\w-]{11})/)?.[1];
+	let video = canonical.match(/[?&]v=([\w-]{11})/)?.[1];
+	// consent wall or an unexpected page shape strips the canonical link, so fall back to the player payload
+	if (!video && /"isLiveNow":true|"isLive":true/.test($.html)) video = $.html.match(/"videoId":"([\w-]{11})"/)?.[1];
+	// never report a live channel as offline just because the page was unreadable
+	if (!canonical && !video) throw new Error('youtube page not readable');
+	if (!video) video = await ytLiveFallback($.html);
 	// offline falls back to the channel banner, then the avatar
 	// the embedded banner URL bakes in a letterbox crop, ask for the plain 16/9 art instead
 	const bannerId = $.html.match(/https:\/\/yt3\.googleusercontent\.com\/([\w-]+)=w\d+-fcrop64=/)?.[1];
