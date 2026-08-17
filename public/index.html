@@ -107,6 +107,8 @@
 			}
 		</script>
 
+		<script defer src="https://cloud.umami.is/script.js" data-website-id="98109f8f-156d-4132-bf46-57efa542d2af"></script>
+
 		<!-- inline icon, so browsers stop requesting /favicon.ico and logging 404s -->
 		<link
 			rel="icon"
@@ -426,6 +428,9 @@
 			let idx = 0; // which entry of a batch is showing
 			let batchKey = ''; // channel set on screen, so polling keeps your place
 
+			/** Umami event, a no-op when the script is blocked. */
+			const track = (name, data) => window.umami?.track(name, data);
+
 			// response / docs tabs inside the floating panel
 			const raw = document.getElementById('raw');
 
@@ -439,13 +444,17 @@
 				btn.addEventListener('click', () => {
 					setTab(btn.dataset.view);
 					localStorage.setItem('apiTab', btn.dataset.view);
+					track('api-tab', { view: btn.dataset.view });
 				}),
 			);
 
 			// panel state survives a refresh
 			raw.open = localStorage.getItem('apiOpen') === '1';
 			setTab(localStorage.getItem('apiTab') === 'docs' ? 'docs' : 'res');
-			raw.addEventListener('toggle', () => localStorage.setItem('apiOpen', raw.open ? '1' : '0'));
+			raw.addEventListener('toggle', () => {
+				localStorage.setItem('apiOpen', raw.open ? '1' : '0');
+				if (raw.open) track('api-open');
+			});
 			addEventListener('keydown', (e) => {
 				if (e.key === 'Escape' && raw.open) raw.open = false;
 			});
@@ -457,6 +466,7 @@
 				const open = box.toggleAttribute('data-open');
 				moreBtn.setAttribute('aria-expanded', String(open));
 				moreBtn.textContent = open ? 'less info' : 'click for more info';
+				if (open) track('more-info');
 			});
 
 			/** Same 16/9 box in every state. Real art fills it, a bare avatar sits centered instead. */
@@ -506,8 +516,10 @@
 
 			// click the poster to swap in the real player
 			out.addEventListener('click', (e) => {
+				if (e.target.closest('a[target="_blank"]')) track('watch', { platform: current?.platform, ref: current?.ref });
 				if (!e.target.closest('.play') || !current) return;
 				playing = `${current.platform}:${current.ref}`;
+				track('play', { platform: current.platform, ref: current.ref });
 				e.target.closest('.frame').innerHTML =
 					`<iframe src="${embedSrc(current)}" allow="autoplay; fullscreen; encrypted-media" allowfullscreen title="stream"></iframe>`;
 			});
@@ -549,10 +561,11 @@
 			}
 
 			/** Step through a batch, wrapping at both ends. */
-			function step(delta) {
+			function step(delta, via = 'arrow') {
 				const n = view?.body?.results?.length || 0;
 				if (n < 2) return;
 				idx = (idx + delta + n) % n;
+				track('page', { via, dir: delta > 0 ? 'next' : 'prev' });
 				playing = null; // paging away tears down any running player
 				show(delta > 0 ? ' from-right' : ' from-left');
 			}
@@ -566,7 +579,7 @@
 				(e) => {
 					const dx = e.clientX - sx;
 					const dy = e.clientY - sy;
-					if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) step(dx < 0 ? 1 : -1);
+					if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) step(dx < 0 ? 1 : -1, 'swipe');
 				},
 				{ passive: true },
 			);
@@ -576,8 +589,8 @@
 			});
 			addEventListener('keydown', (e) => {
 				if (e.target.tagName === 'INPUT' || e.metaKey || e.ctrlKey || e.altKey) return;
-				if (e.key === 'ArrowRight') step(1);
-				else if (e.key === 'ArrowLeft') step(-1);
+				if (e.key === 'ArrowRight') step(1, 'key');
+				else if (e.key === 'ArrowLeft') step(-1, 'key');
 			});
 
 			/** Light the picked platform and slide the glow to it. */
@@ -589,6 +602,7 @@
 			}
 			tabs.forEach((t) =>
 				t.addEventListener('click', () => {
+					if (t.dataset.platform !== platform) track('platform', { platform: t.dataset.platform });
 					setPlatform(t.dataset.platform);
 					if (document.getElementById('ref').value.trim()) document.getElementById('f').requestSubmit();
 				}),
@@ -605,8 +619,8 @@
 			}
 			setInterval(tick, 10_000);
 
-			/** Poll the API for one channel and keep the answer fresh. */
-			async function check(platform, ref) {
+			/** Poll the API for one channel and keep the answer fresh. Only the first poll is tracked. */
+			async function check(platform, ref, first = false) {
 				try {
 					// the same path serves the page to browsers, so ask for JSON explicitly
 					const path = `/${platform}/${encodeURIComponent(ref)}`;
@@ -617,6 +631,7 @@
 					document.getElementById('raw').hidden = false;
 					if (body.error) {
 						view = null;
+						if (first) track('result', { platform, ref, status: 'error', error: body.error });
 						return render(frame(), `<span class="off">${body.error}</span>`);
 					}
 					view = { body };
@@ -632,6 +647,14 @@
 						idx = 0;
 					}
 					const d = body.results ? body.results[idx] : body;
+					if (first)
+						track('result', {
+							platform,
+							ref,
+							status: !d.found ? 'not-found' : d.live ? 'live' : 'offline',
+							batch: body.results?.length || 1,
+							live: body.live?.length ?? (d.live ? 1 : 0),
+						});
 					// leave a running player alone, only the timestamp keeps ticking
 					if (playing === `${d.platform}:${d.ref}` && d.live) {
 						checkedAt = Date.now() - d.age * 1000;
@@ -640,6 +663,7 @@
 					playing = null;
 					show();
 				} catch {
+					if (first) track('result', { platform, ref, status: 'network-error' });
 					render(frame(), `<span class="off">network error</span>`);
 				}
 			}
@@ -656,7 +680,8 @@
 				const path = `/${p}/${encodeURIComponent(ref)}`;
 				if (location.pathname !== path) history.pushState({}, '', path); // no dupe entry when replaying a back/forward
 				if (!out.querySelector('.frame')) render(frame(), `<span class="off">checking…</span>`); // keep any existing card, no flicker
-				check(p, ref);
+				track('check', { platform: p, ref, batch: ref.split(',').length });
+				check(p, ref, true);
 				timer = setInterval(() => check(p, ref), 20_000);
 			});
 
