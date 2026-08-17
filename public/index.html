@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>amilive</title>
+		<style>
+			:root { color-scheme: dark; }
+			body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #0e0e11; color: #eee; font: 16px/1.5 system-ui, sans-serif; }
+			main { width: min(520px, 90vw); text-align: center; }
+			h1 { font-size: 1.4rem; font-weight: 600; letter-spacing: .04em; }
+			form { display: flex; gap: .5rem; }
+			select, input, button { padding: .7rem .8rem; border-radius: .5rem; border: 1px solid #333; background: #17171c; color: inherit; font: inherit; }
+			input { flex: 1; }
+			button { cursor: pointer; }
+			#out { margin-top: 2rem; font-size: 2rem; font-weight: 700; }
+			.live { color: #4ade80; }
+			.off { color: #888; }
+			small { display: block; color: #666; margin-top: .5rem; font-size: .8rem; font-weight: 400; }
+			a { color: #4ade80; }
+			.lede { color: #9a9aa5; font-size: .9rem; text-align: center; margin: 0 0 1.5rem; }
+			details { margin-top: 1.5rem; text-align: left; color: #888; font-size: .85rem; }
+			summary { cursor: pointer; }
+			pre { background: #17171c; border: 1px solid #333; border-radius: .5rem; padding: .8rem; overflow-x: auto; color: #ccc; }
+			footer { margin-top: 2rem; color: #5a5a63; font-size: .75rem; text-align: left; }
+		</style>
+	</head>
+	<body>
+		<main>
+			<h1>am i live?</h1>
+			<p class="lede">Check if a YouTube or Twitch channel is streaming right now. No API keys, no login - scraped from the public channel page.</p>
+			<form id="f">
+				<select id="platform">
+					<option value="yt">YouTube</option>
+					<option value="twitch">Twitch</option>
+				</select>
+				<input id="ref" placeholder="@adamcyounis" autocomplete="off" required />
+				<button>check</button>
+			</form>
+			<div id="out"></div>
+			<details id="raw" hidden>
+				<summary>API response</summary>
+				<pre id="json"></pre>
+			</details>
+			<footer>
+				Upstream pages are scraped at most once per minute per channel. Your browser repolls every 20s and gets the cached
+				answer, so results are accurate to the minute.
+			</footer>
+		</main>
+		<script>
+			const out = document.getElementById('out');
+			let timer;
+
+			/** Poll the API for one channel and keep the answer fresh. */
+			async function check(platform, ref) {
+				try {
+					const res = await fetch(`/${platform}/${encodeURIComponent(ref)}`);
+					const d = await res.json();
+					document.getElementById('json').textContent = JSON.stringify(d, null, 2);
+					document.getElementById('raw').hidden = false;
+					if (d.error) return (out.textContent = d.error);
+					if (!d.found) return (out.innerHTML = `<span class="off">not found</span>`);
+					out.innerHTML = d.live
+						? `<span class="live">LIVE</span><small>${d.url ? `<a href="${d.url}" target="_blank" rel="noreferrer">watch</a> · ` : ''}checked just now</small>`
+						: `<span class="off">offline</span><small>rechecking every minute</small>`;
+				} catch {
+					out.textContent = 'network error';
+				}
+			}
+
+			document.getElementById('f').addEventListener('submit', (e) => {
+				e.preventDefault();
+				const platform = document.getElementById('platform').value;
+				const ref = document.getElementById('ref').value.trim();
+				if (!ref) return;
+				clearInterval(timer);
+				location.hash = `${platform}/${ref}`;
+				out.textContent = 'checking…';
+				check(platform, ref);
+				timer = setInterval(() => check(platform, ref), 20_000);
+			});
+
+			// deep link: #yt/@adamcyounis
+			const [platform, ...rest] = decodeURIComponent(location.hash.slice(1)).split('/');
+			if (rest.length) {
+				document.getElementById('platform').value = platform;
+				document.getElementById('ref').value = rest.join('/');
+				document.getElementById('f').requestSubmit();
+			}
+		</script>
+	</body>
+</html>
