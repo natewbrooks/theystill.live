@@ -72,23 +72,29 @@
 			.tab[aria-checked='true'].twitch { color: #9146ff; }
 			.tab[aria-checked='true'] svg { filter: drop-shadow(0 0 .5em currentColor); }
 			/* height reserved up front, so switching platforms never reflows the page */
-			/* reserve = frame (16/9) + 1rem gap + 3rem status line + .5rem gap + 1.2rem small line */
-			#out { margin-top: 2rem; font-size: 2rem; font-weight: 700; min-height: calc(90vw * 9 / 16 + 5.7rem); overflow: hidden; }
-			@media (min-width: 560px) { #out { min-height: calc(520px * 9 / 16 + 5.7rem); } }
+			/* reserve = frame (16/9) + 1rem gap + 3rem status + 1.35rem name line + .5rem gap + 1.2rem small line */
+			#out { margin-top: 2rem; font-size: 2rem; font-weight: 700; min-height: calc(90vw * 9 / 16 + 7.05rem); overflow: hidden; }
+			@media (min-width: 560px) { #out { min-height: calc(520px * 9 / 16 + 7.05rem); } }
 			.frame { display: grid; place-items: center; width: 100%; aspect-ratio: 16 / 9; margin-bottom: 1rem; overflow: hidden; border-radius: .6rem; background: var(--panel); }
-			/* contain, so a preview that is not exactly 16/9 never gets its edges cropped */
-			.frame img { width: 100%; height: 100%; object-fit: contain; }
+			/* cover: fills the box at its own aspect ratio, cropped rather than stretched */
+			.frame img { width: 100%; height: 100%; object-fit: cover; }
 			/* real offline art fills the box, just dimmed */
 			.frame.dim img { opacity: .75; }
 			/* a channel banner is far wider than 16/9, crop it rather than letterbox */
 			.frame.banner img { object-fit: cover; }
 			/* nothing but an avatar to show: center it small instead of stretching */
 			.frame.avatar img { width: auto; height: 45%; border-radius: 50%; opacity: .5; filter: grayscale(.5); }
+			/* 404 with the troll face as the zero, centered in the frame */
+			.nf { display: flex; align-items: center; gap: .1em; font-size: clamp(3rem, 13vw, 5.5rem); font-weight: 700; line-height: 1; color: #3a3a44; }
+			/* beats the .frame img rule, the face is its own sized glyph. Its ink is baked to match .nf */
+			.nf img { width: 1.05em; height: 1.05em; object-fit: contain; }
 			.live { color: #4ade80; }
 			.dot { display: inline-block; width: .55em; height: .55em; margin-right: .4em; vertical-align: middle; border-radius: 50%; background: #ef4444; box-shadow: 0 0 .6em #ef4444; animation: blink 1.2s steps(1, end) infinite; }
 			@keyframes blink { 50% { opacity: .15; } }
 			@media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
 			.off { color: #888; }
+			/* which channel of a batch is on screen */
+			.who { display: block; min-height: 1.35rem; margin-top: -.2rem; color: #9a9aa5; font-size: .9rem; font-weight: 400; }
 			small { display: block; color: #666; margin-top: .5rem; font-size: .8rem; font-weight: 400; }
 			#ago { display: inline-block; min-width: 12ch; text-align: left; font-variant-numeric: tabular-nums; }
 			a { color: #4ade80; }
@@ -102,18 +108,24 @@
 			details[open] summary { color: #ccc; }
 			/* opens upward, the chip sits at the bottom of the screen */
 			.panel { position: absolute; left: 0; right: 0; bottom: calc(100% + .4rem); border-radius: .5rem; background: var(--panel); box-shadow: 0 1.2rem 2.5rem -.8rem #000c, 0 0 0 1px #ffffff0f; }
-			.tabs { display: flex; gap: .3rem; padding: .4rem .5rem 0; }
-			.pt { padding: .25rem .6rem; border-radius: .35rem .35rem 0 0; background: transparent; color: #6a6a72; font-size: .8rem; }
-			.pt[aria-selected='true'] { color: #eee; background: #ffffff0f; }
+			/* equal halves, so the highlight can just slide between them */
+			.tabs { position: relative; display: flex; margin: .4rem .5rem 0; }
+			.pt { flex: 1; padding: .25rem .6rem; background: transparent; color: #6a6a72; font-size: .8rem; transition: color .25s; }
+			.pt[aria-selected='true'] { color: #eee; }
+			.pt-glow { position: absolute; top: 0; bottom: 0; left: 0; width: 50%; border-radius: .35rem .35rem 0 0; background: #ffffff0f; pointer-events: none; transition: transform .25s cubic-bezier(.4, 0, .2, 1); }
+			.tabs[data-view='docs'] .pt-glow { transform: translateX(100%); }
 			.req { padding: .6rem .8rem; color: #9a9aa5; font-family: ui-monospace, monospace; word-break: break-all; box-shadow: inset 0 -1px 0 #ffffff0f, inset 0 1px 0 #ffffff0f; }
-			.docs { padding: .3rem .8rem .8rem; max-height: 40vh; overflow: auto; line-height: 1.6; }
+			/* both views share one fixed height, so switching tabs cannot resize the panel */
+			.panel > [data-pane] { display: flex; flex-direction: column; height: min(22rem, 55vh); }
+			.panel > [data-pane][hidden] { display: none; } /* display: flex would otherwise beat the hidden attribute */
+			.docs { flex: 1; padding: .3rem .8rem .8rem; overflow: auto; line-height: 1.6; }
 			.docs p { margin: .7rem 0 .3rem; }
 			.docs b { color: #ccc; font-weight: 600; }
 			.docs code { display: block; color: #9a9aa5; font-family: ui-monospace, monospace; font-size: .8rem; }
 			.docs li code, .docs p code { display: inline; color: #4ade80; }
 			.docs ul { margin: .2rem 0; padding-left: 1.1rem; }
 			.verb { color: #4ade80; font-weight: 700; }
-			pre { margin: 0; padding: .8rem; max-height: 40vh; overflow: auto; color: #ccc; }
+			pre { flex: 1; margin: 0; padding: .8rem; overflow: auto; color: #ccc; }
 			footer { margin-top: 2rem; color: #5a5a63; font-size: .75rem; text-align: left; }
 		</style>
 	</head>
@@ -139,7 +151,7 @@
 						</svg>
 					</button>
 				</div>
-				<input id="ref" placeholder="@lofigirl" autocomplete="off" required />
+				<input id="ref" placeholder="lofigirl" autocomplete="off" required />
 				<button id="go" aria-label="check" title="check">
 					<svg viewBox="0 0 24 24" aria-hidden="true">
 						<path d="M10 2a8 8 0 1 0 4.9 14.32l5.39 5.39 1.42-1.42-5.39-5.39A8 8 0 0 0 10 2zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12z" />
@@ -150,24 +162,25 @@
 			<details id="raw">
 				<summary>API</summary>
 				<div class="panel">
-					<div class="tabs" role="tablist">
+					<div class="tabs" role="tablist" data-view="res">
+						<span class="pt-glow" aria-hidden="true"></span>
 						<button type="button" class="pt" data-view="res" aria-selected="true" role="tab">response</button>
 						<button type="button" class="pt" data-view="docs" aria-selected="false" role="tab">docs</button>
 					</div>
-					<div data-view="res">
+					<div data-pane="res">
 						<div class="req"><span class="verb">GET</span> <span id="reqUrl">-</span></div>
 						<pre id="json">run a check to see the response</pre>
 					</div>
-					<div data-view="docs" hidden>
+					<div data-pane="docs" hidden>
 						<div class="docs">
 							<p><b>One channel</b></p>
-							<code>GET /yt/@lofigirl</code>
+							<code>GET /yt/lofigirl</code>
 							<code>GET /yt/UCSJ4gkVC6NrvII8umztf0Ow</code>
 							<code>GET /twitch/ludwig</code>
 							<p><b>Several at once</b> - comma-separated, up to 10. Prefix with <code>platform:</code> to mix.</p>
 							<code>GET /twitch/lofigirl,ludwig</code>
-							<code>GET /yt/@lofigirl,twitch:ludwig</code>
-							<p>Batches answer <code>{ results: [...], live: ["yt:@lofigirl"] }</code>.</p>
+							<code>GET /yt/lofigirl,twitch:ludwig</code>
+							<p>Batches answer <code>{ results: [...], live: ["yt:lofigirl"] }</code>.</p>
 							<p><b>Fields</b></p>
 							<ul>
 								<li><code>live</code> streaming right now</li>
@@ -193,17 +206,38 @@
 			let timer, checkedAt, platform = 'yt';
 
 			// response / docs tabs inside the floating panel
+			const raw = document.getElementById('raw');
+
+			/** Show one pane and slide the highlight to its tab. */
+			function setTab(view) {
+				document.querySelectorAll('.pt').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.view === view)));
+				document.querySelector('.tabs').dataset.view = view;
+				document.querySelectorAll('.panel > [data-pane]').forEach((v) => (v.hidden = v.dataset.pane !== view));
+			}
 			document.querySelectorAll('.pt').forEach((btn) =>
 				btn.addEventListener('click', () => {
-					document.querySelectorAll('.pt').forEach((b) => b.setAttribute('aria-selected', String(b === btn)));
-					document.querySelectorAll('.panel > [data-view]').forEach((v) => (v.hidden = v.dataset.view !== btn.dataset.view));
+					setTab(btn.dataset.view);
+					localStorage.setItem('apiTab', btn.dataset.view);
 				}),
 			);
+
+			// panel state survives a refresh
+			raw.open = localStorage.getItem('apiOpen') === '1';
+			setTab(localStorage.getItem('apiTab') === 'docs' ? 'docs' : 'res');
+			raw.addEventListener('toggle', () => localStorage.setItem('apiOpen', raw.open ? '1' : '0'));
+			addEventListener('keydown', (e) => {
+				if (e.key === 'Escape' && raw.open) raw.open = false;
+			});
 
 			/** Same 16/9 box in every state. Real art fills it, a bare avatar sits centered instead. */
 			function frame(src, art) {
 				const cls = art === 'avatar' ? ' avatar' : art === 'preview' ? '' : art === 'banner' ? ' dim banner' : ' dim';
 				return `<div class="frame${cls}">${src ? `<img src="${src}" alt="" onerror="this.remove()" />` : ''}</div>`;
+			}
+
+			/** Missing channel: a 404 with the troll face standing in for the zero. */
+			function notFound() {
+				return `<div class="frame"><div class="nf">4<img src="/troll.svg" alt="0" />4</div></div>`;
 			}
 
 			/** Swap the result card. Status always lands in the same spot. */
@@ -242,18 +276,21 @@
 					// the same path serves the page to browsers, so ask for JSON explicitly
 					const path = `/${platform}/${encodeURIComponent(ref)}`;
 					const res = await fetch(path, { headers: { accept: 'application/json' } });
-					const d = await res.json();
+					const body = await res.json();
 					document.getElementById('reqUrl').textContent = `${location.origin}${path}`;
-					document.getElementById('json').textContent = `${res.status} ${res.statusText}\n\n${JSON.stringify(d, null, 2)}`;
+					document.getElementById('json').textContent = `${res.status} ${res.statusText}\n\n${JSON.stringify(body, null, 2)}`;
 					document.getElementById('raw').hidden = false;
-					if (d.error) return render(frame(), `<span class="off">${d.error}</span>`);
-					if (!d.found) return render(frame(), `<span class="off">not found</span>`);
+					if (body.error) return render(frame(), `<span class="off">${body.error}</span>`);
+					// a batch shows whoever is live first, falling back to the first entry
+					const d = body.results ? body.results.find((r) => r.live) || body.results[0] : body;
+					const tally = body.results ? `${body.live.length}/${body.results.length} live · ` : '';
+					if (!d.found) return render(notFound(), `<span class="off">not found</span><span class="who">${body.results ? d.ref : ''}</span>`, tally);
 					checkedAt = Date.now() - d.age * 1000; // server age avoids client clock skew
 					render(
 						// cache-busted, so the live preview matches the poll
 						frame(d.thumbnail && `${d.thumbnail}?t=${Date.now()}`, d.art),
-						d.live ? `<span class="live"><i class="dot"></i>LIVE</span>` : `<span class="off">offline</span>`,
-						d.live && d.url ? `<a href="${d.url}" target="_blank" rel="noreferrer">watch</a> · ` : '',
+						`${d.live ? `<span class="live"><i class="dot"></i>LIVE</span>` : `<span class="off">offline</span>`}<span class="who">${body.results ? d.ref : ''}</span>`,
+						`${tally}${d.live && d.url ? `<a href="${d.url}" target="_blank" rel="noreferrer">watch</a> · ` : ''}`,
 					);
 					tick();
 				} catch {
@@ -263,8 +300,10 @@
 
 			document.getElementById('f').addEventListener('submit', (e) => {
 				e.preventDefault();
-				const ref = document.getElementById('ref').value.trim();
+				const input = document.getElementById('ref');
+				const ref = input.value.trim().replace(/^@+/, ''); // handles are stored bare, both platforms accept it
 				if (!ref) return;
+				input.value = ref;
 				const p = platform; // pin, so a later toggle cannot hijack this poll
 				clearInterval(timer);
 				const path = `/${p}/${encodeURIComponent(ref)}`;

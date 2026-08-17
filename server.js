@@ -60,7 +60,9 @@ async function yt(ref) {
 	const canonical = $('link[rel="canonical"]').attr('href') || '';
 	const video = canonical.match(/[?&]v=([\w-]{11})/)?.[1];
 	// offline falls back to the channel banner, then the avatar
-	const banner = $.html.match(/https:\/\/yt3\.googleusercontent\.com\/[\w-]+=w1707-fcrop64=[^"\\]+/)?.[0];
+	// the embedded banner URL bakes in a letterbox crop, ask for the plain 16/9 art instead
+	const bannerId = $.html.match(/https:\/\/yt3\.googleusercontent\.com\/([\w-]+)=w\d+-fcrop64=/)?.[1];
+	const banner = bannerId && `https://yt3.googleusercontent.com/${bannerId}=w1280`;
 	const thumbnail = video ? `https://i.ytimg.com/vi/${video}/maxresdefault.jpg` : banner || $('meta[property="og:image"]').attr('content') || null;
 	return {
 		live: Boolean(video),
@@ -165,6 +167,10 @@ const server = createServer(async (req, res) => {
 	if (!platform && !rawRef) {
 		const html = await readFile(new URL('./public/index.html', import.meta.url));
 		return res.writeHead(200, { 'content-type': 'text/html' }).end(html);
+	}
+	if (platform === 'troll.svg' && !rawRef) {
+		const svg = await readFile(new URL('./public/troll.svg', import.meta.url));
+		return res.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'public, max-age=86400' }).end(svg);
 	}
 	if (platform === 'robots.txt') return res.writeHead(200, { 'content-type': 'text/plain' }).end(`User-agent: *\nAllow: /$\nDisallow: /yt/\nDisallow: /twitch/\nSitemap: ${SITE}sitemap.xml\n`);
 	if (platform === 'sitemap.xml') {
