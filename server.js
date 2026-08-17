@@ -78,7 +78,10 @@ async function ytLiveFallback(html, channelId) {
 	if (!channelId || !/"text":"LIVE"|"style":"LIVE"/.test(html)) return null;
 	const ids = [...new Set([...html.matchAll(/"videoId":"([\w-]{11})"/g)].map((m) => m[1]))].slice(0, 5);
 	for (const id of ids) {
-		const $ = await load(`https://www.youtube.com/watch?v=${id}`, { cookie: YT_COOKIE }).catch(() => null);
+		const $ = await load(`https://www.youtube.com/watch?v=${id}`, { cookie: YT_COOKIE }).catch((e) => {
+			console.log('yt-fb-err', id, e.message);
+			return null;
+		});
 		const vd = $ && playerDetails($.html);
 		// TEMP DEBUG: remove after diagnosing datacenter page variant
 		console.log('yt-fb', id, JSON.stringify({
