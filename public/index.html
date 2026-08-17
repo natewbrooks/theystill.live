@@ -245,7 +245,8 @@
 				const play = playable
 					? `<button type="button" class="play" aria-label="watch here"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg></button>`
 					: '';
-				return `<div class="frame${cls}">${src ? `<img src="${src}" alt="" onerror="this.remove()" />` : ''}${play}</div>`;
+				// no-referrer: googleusercontent refuses hotlinked banners when a referrer is sent
+				return `<div class="frame${cls}">${src ? `<img src="${src}" alt="" referrerpolicy="no-referrer" onerror="this.remove()" />` : ''}${play}</div>`;
 			}
 
 			/** The API hands back an embed URL, Twitch's needs this page's host filling in. */
@@ -318,8 +319,8 @@
 					if (playing === `${d.platform}:${d.ref}` && d.live) return tick();
 					playing = null;
 					render(
-						// cache-busted, so the live preview matches the poll
-						frame(d.thumbnail && `${d.thumbnail}?t=${Date.now()}`, d.art, d.live && d.embed),
+						// only the live preview changes minute to minute, the rest are static art
+						frame(d.thumbnail && (d.art === 'preview' ? `${d.thumbnail}?t=${Date.now()}` : d.thumbnail), d.art, d.live && d.embed),
 						`${d.live ? `<span class="live"><i class="dot"></i>LIVE</span>` : `<span class="off">offline</span>`}<span class="who">${body.results ? d.ref : ''}</span>`,
 						`${tally}${d.live && d.url ? `<a href="${d.url}" target="_blank" rel="noreferrer">watch</a> · ` : ''}`,
 					);
