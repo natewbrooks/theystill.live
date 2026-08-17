@@ -80,6 +80,13 @@ async function ytLiveFallback(html, channelId) {
 	for (const id of ids) {
 		const $ = await load(`https://www.youtube.com/watch?v=${id}`, { cookie: YT_COOKIE }).catch(() => null);
 		const vd = $ && playerDetails($.html);
+		// TEMP DEBUG: remove after diagnosing datacenter page variant
+		console.log('yt-fb', id, JSON.stringify({
+			page: Boolean($),
+			player: $ && /ytInitialPlayerResponse/.test($.html),
+			vd: vd && { videoId: vd.videoId, channelId: vd.channelId, isLiveNow: vd.isLiveNow },
+			liveText: $ && YT_LIVE_TEXT.test($.html),
+		}));
 		if (vd?.videoId === id && vd.channelId === channelId && (vd.isLiveNow || YT_LIVE_TEXT.test($.html))) return id;
 	}
 	return null;
@@ -117,6 +124,8 @@ async function yt(ref) {
 	// no canonical: trust the embedded player payload only when it names this channel's own live video
 	if (!video) {
 		const vd = playerDetails($.html);
+		// TEMP DEBUG: remove after diagnosing datacenter page variant
+		console.log('yt-vd', JSON.stringify(vd && { videoId: vd.videoId, channelId: vd.channelId, isLiveNow: vd.isLiveNow }));
 		if (vd && (!id || vd.channelId === id) && (vd.isLiveNow || YT_LIVE_TEXT.test($.html))) video = vd.videoId;
 	}
 	// never report a live channel as offline just because the page was unreadable
