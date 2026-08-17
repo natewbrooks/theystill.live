@@ -101,6 +101,19 @@ async function yt(ref) {
 		$.html.match(/"externalChannelId":"(UC[\w-]{22})"|"browseId":"(UC[\w-]{22})"/)?.slice(1).find(Boolean) ||
 		null;
 	let video = canonical.match(/[?&]v=([\w-]{11})/)?.[1];
+	// TEMP DEBUG: remove after diagnosing datacenter page variant
+	console.log('yt-debug', JSON.stringify({
+		ref,
+		len: $.html.length,
+		canonical,
+		id,
+		ogImage: Boolean($('meta[property="og:image"]').attr('content')),
+		player: /ytInitialPlayerResponse/.test($.html),
+		badge: /"text":"LIVE"|"style":"LIVE"/.test($.html),
+		liveText: YT_LIVE_TEXT.test($.html),
+		isLiveNow: /"isLiveNow":true/.test($.html),
+		vids: [...new Set([...$.html.matchAll(/"videoId":"([\w-]{11})"/g)].map((m) => m[1]))].slice(0, 5),
+	}));
 	// no canonical: trust the embedded player payload only when it names this channel's own live video
 	if (!video) {
 		const vd = playerDetails($.html);
