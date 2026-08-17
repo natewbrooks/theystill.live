@@ -39,7 +39,13 @@ async function youtube(ref) {
 	const canonical = $('link[rel="canonical"]').attr('href') || '';
 	const channelId = $.html.match(/"externalChannelId":"(UC[\w-]{22})"|channel\/(UC[\w-]{22})/)?.slice(1).find(Boolean) || null;
 	const videoId = canonical.match(/[?&]v=([\w-]{11})/)?.[1] || null;
-	return { live: Boolean(videoId), found: true, id: channelId, url: videoId ? canonical : null };
+	return {
+		live: Boolean(videoId),
+		found: true,
+		id: channelId,
+		url: videoId ? canonical : null,
+		thumb: videoId ? `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg` : $('meta[property="og:image"]').attr('content') || null,
+	};
 }
 
 /**
@@ -52,7 +58,17 @@ async function twitch(ref) {
 	if (!$) return { live: false, found: false };
 	const title = $('meta[property="og:title"]').attr('content') || '';
 	if (!title) return { live: false, found: false };
-	return { live: / - Live on Twitch$/.test(title), found: true, id: login, url: `https://www.twitch.tv/${login}` };
+	const live = / - Live on Twitch$/.test(title);
+	return {
+		live,
+		found: true,
+		id: login,
+		url: `https://www.twitch.tv/${login}`,
+		// live preview is public, no key needed; falls back to profile image when offline
+		thumb: live
+			? `https://static-cdn.jtvnw.net/previews-ttv/live_user_${login}-640x360.jpg`
+			: $('meta[property="og:image"]').attr('content') || null,
+	};
 }
 
 const providers = { yt: youtube, twitch };
