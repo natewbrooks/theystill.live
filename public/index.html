@@ -172,8 +172,22 @@
 			.nf { display: flex; align-items: center; gap: .1em; font-size: clamp(3rem, 13vw, 5.5rem); font-weight: 700; line-height: 1; color: #3a3a44; }
 			/* beats the .frame img rule, the face is its own sized glyph. Its ink is baked to match .nf */
 			.nf img { width: 1.05em; height: 1.05em; object-fit: contain; }
+			/* batch paging: arrows sit over the frame, the card slides in from the side you came from */
+			.card { position: relative; }
+			/* only the preview moves, every label around it stays put */
+			.card.from-right .frame { animation: from-right .25s ease both; }
+			.card.from-left .frame { animation: from-left .25s ease both; }
+			@keyframes from-right { from { opacity: 0; transform: translateX(6%); } }
+			@keyframes from-left { from { opacity: 0; transform: translateX(-6%); } }
+			@media (prefers-reduced-motion: reduce) { .frame { animation: none !important; } }
+			.nav { position: absolute; top: calc((100vw - 10vw) * 9 / 32); transform: translateY(-50%); display: grid; place-items: center; width: 2.2rem; height: 2.2rem; padding: 0; border-radius: 50%; background: #0009; color: #eee; font-size: 1.4rem; line-height: 1; opacity: .55; transition: opacity .15s; }
+			@media (min-width: 560px) { .nav { top: calc(520px * 9 / 32); } }
+			.nav:hover { opacity: 1; }
+			.nav.prev { left: .5rem; }
+			.nav.next { right: .5rem; }
+			.count { position: absolute; right: .6rem; top: .6rem; padding: .1rem .45rem; border-radius: .35rem; background: #000a; color: #ccc; font-size: .7rem; font-weight: 400; font-variant-numeric: tabular-nums; }
 			.live { color: #4ade80; }
-			.dot { display: inline-block; position: relative; top: 8px; width: .55em; height: .55em; margin-right: .4em; vertical-align: middle; border-radius: 50%; background: #ef4444; box-shadow: 0 0 .6em #ef4444; animation: blink 1.2s steps(1, end) infinite; }
+			.dot { display: inline-block; width: .55em; height: .55em; margin-right: .4em; vertical-align: middle; border-radius: 50%; background: #ef4444; box-shadow: 0 0 .6em #ef4444; animation: blink 1.2s steps(1, end) infinite; }
 			@keyframes blink { 50% { opacity: .15; } }
 			@media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
 			.off { color: #888; }
@@ -369,6 +383,9 @@
 			const decoded = new Set(); // srcs already decoded once, so repeat polls skip the spinner
 			let current = null; // result on screen, so the play button knows what to embed
 			let playing = null; // "platform:ref" whose iframe is running, never re-rendered under it
+			let view = null; // last response body, so arrows can page it without refetching
+			let idx = 0; // which entry of a batch is showing
+			let batchKey = ''; // channel set on screen, so polling keeps your place
 
 			// response / docs tabs inside the floating panel
 			const raw = document.getElementById('raw');
@@ -459,11 +476,55 @@
 				return `<div class="frame"><div class="nf">4<img src="/troll.svg" alt="0" />4</div></div>`;
 			}
 
-			/** Swap the result card. Status always lands in the same spot. */
-			function render(frameHtml, status, prefix = '') {
-				out.innerHTML = `<div class="card">${frameHtml}${status}<small>${prefix}<span id="ago"></span></small></div>`;
+			/** Swap the result card. Status always lands in the same spot. dir slides it in from that side. */
+			function render(frameHtml, status, prefix = '', dir = '') {
+				const many = view?.body?.results?.length > 1;
+				const arrows = many
+					? `<button type="button" class="nav prev" aria-label="previous channel">‹</button>
+						<button type="button" class="nav next" aria-label="next channel">›</button>
+						<span class="count">${idx + 1} / ${view.body.results.length}</span>`
+					: '';
+				out.innerHTML = `<div class="card${dir}">${frameHtml}${status}<small>${prefix}<span id="ago"></span></small>${arrows}</div>`;
 				paint();
 			}
+
+			/** Draw whichever entry idx points at. */
+			function show(dir = '') {
+				const b = view.body;
+				const d = b.results ? b.results[idx] : b;
+				const tally = b.results ? `${b.live.length}/${b.results.length} live · ` : '';
+				const who = b.results ? d.ref : '';
+				if (!d.found) return render(notFound(), `<span class="off">not found</span><span class="who">${who}</span>`, tally, dir);
+				checkedAt = Date.now() - d.age * 1000; // server age avoids client clock skew
+				current = d;
+				render(
+					// only the live preview changes minute to minute, the rest are static art
+					frame(d.thumbnail && (d.art === 'preview' ? `${d.thumbnail}?t=${Date.now()}` : d.thumbnail), d.art, d.live && d.embed),
+					`${d.live ? `<span class="live"><i class="dot"></i>LIVE</span>` : `<span class="off">offline</span>`}<span class="who">${who}</span>`,
+					`${tally}${d.live && d.url ? `<a href="${d.url}" target="_blank" rel="noreferrer">watch</a> · ` : ''}`,
+					dir,
+				);
+				tick();
+			}
+
+			/** Step through a batch, wrapping at both ends. */
+			function step(delta) {
+				const n = view?.body?.results?.length || 0;
+				if (n < 2) return;
+				idx = (idx + delta + n) % n;
+				playing = null; // paging away tears down any running player
+				show(delta > 0 ? ' from-right' : ' from-left');
+			}
+
+			out.addEventListener('click', (e) => {
+				if (e.target.closest('.next')) step(1);
+				else if (e.target.closest('.prev')) step(-1);
+			});
+			addEventListener('keydown', (e) => {
+				if (e.target.tagName === 'INPUT' || e.metaKey || e.ctrlKey || e.altKey) return;
+				if (e.key === 'ArrowRight') step(1);
+				else if (e.key === 'ArrowLeft') step(-1);
+			});
 
 			/** Light the picked platform and slide the glow to it. */
 			function setPlatform(next) {
@@ -500,23 +561,30 @@
 					document.getElementById('reqUrl').textContent = `${location.origin}${path}`;
 					document.getElementById('json').textContent = `${res.status} ${res.statusText}\n\n${JSON.stringify(body, null, 2)}`;
 					document.getElementById('raw').hidden = false;
-					if (body.error) return render(frame(), `<span class="off">${body.error}</span>`);
-					// a batch shows whoever is live first, falling back to the first entry
-					const d = body.results ? body.results.find((r) => r.live) || body.results[0] : body;
-					const tally = body.results ? `${body.live.length}/${body.results.length} live · ` : '';
-					if (!d.found) return render(notFound(), `<span class="off">not found</span><span class="who">${body.results ? d.ref : ''}</span>`, tally);
-					checkedAt = Date.now() - d.age * 1000; // server age avoids client clock skew
-					current = d;
+					if (body.error) {
+						view = null;
+						return render(frame(), `<span class="off">${body.error}</span>`);
+					}
+					view = { body };
+					if (body.results) {
+						// same channel set across polls keeps your place, a new search starts at whoever is live
+						const key = body.results.map((r) => `${r.platform}:${r.ref}`).join(',');
+						if (key !== batchKey) {
+							batchKey = key;
+							idx = Math.max(0, body.results.findIndex((r) => r.live));
+						}
+					} else {
+						batchKey = '';
+						idx = 0;
+					}
+					const d = body.results ? body.results[idx] : body;
 					// leave a running player alone, only the timestamp keeps ticking
-					if (playing === `${d.platform}:${d.ref}` && d.live) return tick();
+					if (playing === `${d.platform}:${d.ref}` && d.live) {
+						checkedAt = Date.now() - d.age * 1000;
+						return tick();
+					}
 					playing = null;
-					render(
-						// only the live preview changes minute to minute, the rest are static art
-						frame(d.thumbnail && (d.art === 'preview' ? `${d.thumbnail}?t=${Date.now()}` : d.thumbnail), d.art, d.live && d.embed),
-						`${d.live ? `<span class="live"><i class="dot"></i>LIVE</span>` : `<span class="off">offline</span>`}<span class="who">${body.results ? d.ref : ''}</span>`,
-						`${tally}${d.live && d.url ? `<a href="${d.url}" target="_blank" rel="noreferrer">watch</a> · ` : ''}`,
-					);
-					tick();
+					show();
 				} catch {
 					render(frame(), `<span class="off">network error</span>`);
 				}
