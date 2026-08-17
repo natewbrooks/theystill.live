@@ -193,6 +193,8 @@ async function sendPage(req, res) {
 	res.writeHead(200, {
 		'content-type': 'text/html; charset=utf-8',
 		'cache-control': 'public, max-age=300',
+		// /yt/ref serves HTML or JSON off the same URL, so caches must key on both headers
+		vary: 'accept, accept-encoding',
 		...(gzip ? { 'content-encoding': 'gzip' } : {}),
 	}).end(gzip ? page.gz : page.raw);
 }
@@ -200,7 +202,7 @@ async function sendPage(req, res) {
 const server = createServer(async (req, res) => {
 	// read-only public API, so any origin may call it
 	const json = (code, body, headers) =>
-		res.writeHead(code, { 'content-type': 'application/json', 'access-control-allow-origin': '*', ...headers }).end(JSON.stringify(body));
+		res.writeHead(code, { 'content-type': 'application/json', 'access-control-allow-origin': '*', vary: 'accept', ...headers }).end(JSON.stringify(body));
 	if (req.method !== 'GET') return json(405, { error: 'GET only' });
 	if (req.url.length > 200) return json(414, { error: 'url too long' });
 
