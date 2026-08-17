@@ -74,12 +74,13 @@ function playerDetails(html) {
  * @returns {Promise<string|null>} the live video id, or null
  */
 async function ytLiveFallback(html, channelId) {
-	if (!/"text":"LIVE"|"style":"LIVE"/.test(html)) return null;
-	const ids = [...new Set([...html.matchAll(/"videoId":"([\w-]{11})"/g)].map((m) => m[1]))].slice(0, 3);
+	// without the channel's own id there is no way to tell its stream from a recommended one, so never guess
+	if (!channelId || !/"text":"LIVE"|"style":"LIVE"/.test(html)) return null;
+	const ids = [...new Set([...html.matchAll(/"videoId":"([\w-]{11})"/g)].map((m) => m[1]))].slice(0, 5);
 	for (const id of ids) {
 		const $ = await load(`https://www.youtube.com/watch?v=${id}`, { cookie: YT_COOKIE }).catch(() => null);
 		const vd = $ && playerDetails($.html);
-		if (vd?.videoId === id && (!channelId || vd.channelId === channelId) && (vd.isLiveNow || YT_LIVE_TEXT.test($.html))) return id;
+		if (vd?.videoId === id && vd.channelId === channelId && (vd.isLiveNow || YT_LIVE_TEXT.test($.html))) return id;
 	}
 	return null;
 }
@@ -93,7 +94,12 @@ async function yt(ref) {
 	const $ = await load(`https://www.youtube.com/${path}/live`, { cookie: YT_COOKIE });
 	if (!$) return { live: false, found: false };
 	const canonical = $('link[rel="canonical"]').attr('href') || '';
-	const id = $.html.match(/"externalChannelId":"(UC[\w-]{22})"|channel\/(UC[\w-]{22})/)?.slice(1).find(Boolean) || null;
+	// own-channel id only: canonical/og:url name this page's channel, and a page-wide "channel/UC..."
+	// match must never be used, it picks up recommended channels
+	const id =
+		`${canonical} ${$('meta[property="og:url"]').attr('content')}`.match(/channel\/(UC[\w-]{22})/)?.[1] ||
+		$.html.match(/"externalChannelId":"(UC[\w-]{22})"|"browseId":"(UC[\w-]{22})"/)?.slice(1).find(Boolean) ||
+		null;
 	let video = canonical.match(/[?&]v=([\w-]{11})/)?.[1];
 	// no canonical: trust the embedded player payload only when it names this channel's own live video
 	if (!video) {
