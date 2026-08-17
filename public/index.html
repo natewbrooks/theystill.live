@@ -75,7 +75,12 @@
 			/* reserve = frame (16/9) + 1rem gap + 3rem status + 1.35rem name line + .5rem gap + 1.2rem small line */
 			#out { margin-top: 2rem; font-size: 2rem; font-weight: 700; min-height: calc(90vw * 9 / 16 + 7.05rem); overflow: hidden; }
 			@media (min-width: 560px) { #out { min-height: calc(520px * 9 / 16 + 7.05rem); } }
-			.frame { display: grid; place-items: center; width: 100%; aspect-ratio: 16 / 9; margin-bottom: 1rem; overflow: hidden; border-radius: .6rem; background: var(--panel); }
+			.frame { position: relative; display: grid; place-items: center; width: 100%; aspect-ratio: 16 / 9; margin-bottom: 1rem; overflow: hidden; border-radius: .6rem; background: var(--panel); }
+			.frame iframe { width: 100%; height: 100%; border: 0; }
+			/* poster stays until clicked, so nothing autoplays and polling cannot restart the stream */
+			.play { position: absolute; inset: 0; display: grid; place-items: center; padding: 0; border-radius: 0; background: #0007; color: #fff; opacity: .85; transition: opacity .15s, background .15s; }
+			.play:hover { opacity: 1; background: #0004; }
+			.play svg { width: 3.4rem; height: 3.4rem; fill: currentColor; filter: drop-shadow(0 .2rem .6rem #000a); }
 			/* cover: fills the box at its own aspect ratio, cropped rather than stretched */
 			.frame img { width: 100%; height: 100%; object-fit: cover; }
 			/* real offline art fills the box, just dimmed */
@@ -204,6 +209,8 @@
 			const out = document.getElementById('out');
 			const tabs = [...document.querySelectorAll('.tab')];
 			let timer, checkedAt, platform = 'yt';
+			let current = null; // result on screen, so the play button knows what to embed
+			let playing = null; // "platform:ref" whose iframe is running, never re-rendered under it
 
 			// response / docs tabs inside the floating panel
 			const raw = document.getElementById('raw');
@@ -230,10 +237,31 @@
 			});
 
 			/** Same 16/9 box in every state. Real art fills it, a bare avatar sits centered instead. */
-			function frame(src, art) {
+			function frame(src, art, playable) {
 				const cls = art === 'avatar' ? ' avatar' : art === 'preview' ? '' : art === 'banner' ? ' dim banner' : ' dim';
-				return `<div class="frame${cls}">${src ? `<img src="${src}" alt="" onerror="this.remove()" />` : ''}</div>`;
+				const play = playable
+					? `<button type="button" class="play" aria-label="watch here"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg></button>`
+					: '';
+				return `<div class="frame${cls}">${src ? `<img src="${src}" alt="" onerror="this.remove()" />` : ''}${play}</div>`;
 			}
+
+			/** Official iframe player for whichever platform this result came from. */
+			function embedSrc(d) {
+				if (d.platform === 'yt') {
+					const v = new URL(d.url).searchParams.get('v');
+					return `https://www.youtube.com/embed/${v}?autoplay=1`;
+				}
+				// parent has to match the host serving this page, so read it at runtime
+				return `https://player.twitch.tv/?channel=${encodeURIComponent(d.id)}&parent=${location.hostname}&autoplay=true`;
+			}
+
+			// click the poster to swap in the real player
+			out.addEventListener('click', (e) => {
+				if (!e.target.closest('.play') || !current) return;
+				playing = `${current.platform}:${current.ref}`;
+				e.target.closest('.frame').innerHTML =
+					`<iframe src="${embedSrc(current)}" allow="autoplay; fullscreen; encrypted-media" allowfullscreen title="stream"></iframe>`;
+			});
 
 			/** Missing channel: a 404 with the troll face standing in for the zero. */
 			function notFound() {
@@ -286,9 +314,13 @@
 					const tally = body.results ? `${body.live.length}/${body.results.length} live · ` : '';
 					if (!d.found) return render(notFound(), `<span class="off">not found</span><span class="who">${body.results ? d.ref : ''}</span>`, tally);
 					checkedAt = Date.now() - d.age * 1000; // server age avoids client clock skew
+					current = d;
+					// leave a running player alone, only the timestamp keeps ticking
+					if (playing === `${d.platform}:${d.ref}` && d.live) return tick();
+					playing = null;
 					render(
 						// cache-busted, so the live preview matches the poll
-						frame(d.thumbnail && `${d.thumbnail}?t=${Date.now()}`, d.art),
+						frame(d.thumbnail && `${d.thumbnail}?t=${Date.now()}`, d.art, d.live && d.url),
 						`${d.live ? `<span class="live"><i class="dot"></i>LIVE</span>` : `<span class="off">offline</span>`}<span class="who">${body.results ? d.ref : ''}</span>`,
 						`${tally}${d.live && d.url ? `<a href="${d.url}" target="_blank" rel="noreferrer">watch</a> · ` : ''}`,
 					);
@@ -305,6 +337,7 @@
 				if (!ref) return;
 				input.value = ref;
 				const p = platform; // pin, so a later toggle cannot hijack this poll
+				playing = null; // a new search tears down any running player
 				clearInterval(timer);
 				const path = `/${p}/${encodeURIComponent(ref)}`;
 				if (location.pathname !== path) history.pushState({}, '', path); // no dupe entry when replaying a back/forward
